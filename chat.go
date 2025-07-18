@@ -61,6 +61,15 @@ var (
 )
 
 // Docker management functions
+func stopOllamaContainer() error {
+	// Stop the Ollama container to free memory
+	cmd := exec.Command("docker", "stop", "ollama")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to stop Ollama container: %v", err)
+	}
+	return nil
+}
+
 func ensureOllamaContainer() error {
 	// Check if Ollama container is running
 	cmd := exec.Command("docker", "ps", "--filter", "name=ollama", "--format", "{{.Names}}")

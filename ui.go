@@ -82,6 +82,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		// Stop Ollama container to free memory when exiting app
+		go stopOllamaContainer()
 		return m, tea.Quit
 	case "enter", " ":
 		cursor := m.menuTable.Cursor()
@@ -105,8 +107,12 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 3:
 			m.viewMode = ViewSettingsPlaceholder
 		case 4:
-			m.viewMode = ViewCleanupPlaceholder
+			// Stop Ollama container
+			go stopOllamaContainer()
+			return m, showStatus("🛑 Ollama container stopped to free memory")
 		case 5:
+			m.viewMode = ViewCleanupPlaceholder
+		case 6:
 			return m, tea.Quit
 		}
 		return m, nil
@@ -126,6 +132,8 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.chatInput.Blur()
 		m.chatMessages = []ChatMessage{}
 		m.chatState = ChatStateInit
+		// Stop Ollama container to free memory when exiting chat
+		go stopOllamaContainer()
 		return m, nil
 	case "enter":
 		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
@@ -256,6 +264,8 @@ func (m model) updateResourceManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg.String() {
 	case "q", "ctrl+c":
+		// Stop Ollama container to free memory when exiting app
+		go stopOllamaContainer()
 		m.viewMode = ViewMenu
 		return m, nil
 	case "esc":
