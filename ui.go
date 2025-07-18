@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -69,6 +70,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: msg.Content})
 			m.chatState = ChatStateReady
+			// Update viewport content and auto-scroll to bottom
+			m.updateChatViewport()
 		}
 		return m, nil
 	}
@@ -91,6 +94,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateCheckingModel
 			m.chatInput.Focus()
 			m.chatMessages = []ChatMessage{} // Clear previous messages
+			m.updateChatViewport() // Initialize viewport with empty content
 			return m, tea.Batch(
 				checkOllamaModel(),
 				m.chatSpinner.Tick,
@@ -117,7 +121,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg.String() {
-	case "esc", "q":
+	case "esc", "ctrl+c":
 		m.viewMode = ViewMenu
 		m.chatInput.Blur()
 		m.chatMessages = []ChatMessage{}
@@ -129,6 +133,8 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
 			m.chatInput.SetValue("")
 			m.chatState = ChatStateLoading
+			// Update viewport content and auto-scroll to bottom
+			m.updateChatViewport()
 			return m, sendChatMessage(userMsg)
 		}
 	}
@@ -136,6 +142,9 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.chatState == ChatStateReady {
 		m.chatInput, cmd = m.chatInput.Update(msg)
 	}
+
+	// Handle viewport scrolling for chat history
+	m.chatViewport, cmd = m.chatViewport.Update(msg)
 
 	return m, cmd
 }
@@ -496,6 +505,13 @@ func (m *model) adjustLayout() {
 
 	m.viewport.Width = m.width - 4
 	m.viewport.Height = tableHeight
+	
+	// Also adjust chat viewport - account for header (3 lines) + footer (3 lines) + padding
+	m.chatViewport.Width = m.width - 6
+	m.chatViewport.Height = m.height - 8
+	if m.chatViewport.Height < 5 {
+		m.chatViewport.Height = 5
+	}
 }
 
 func formatSize(size int64) string {
@@ -520,4 +536,24 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m *model) updateChatViewport() {
+	var content strings.Builder
+	
+	if len(m.chatMessages) == 0 {
+		emptyStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6B7280")).
+			Italic(true)
+		content.WriteString(emptyStyle.Render("💬 Start a conversation with the AI assistant...\n\n"))
+	} else {
+		content.WriteString(renderChatHistory(m.chatMessages))
+	}
+	
+	if m.chatState == ChatStateLoading {
+		content.WriteString(fmt.Sprintf("\n%s Thinking...\n", m.chatSpinner.View()))
+	}
+	
+	m.chatViewport.SetContent(content.String())
+	m.chatViewport.GotoBottom()
 }

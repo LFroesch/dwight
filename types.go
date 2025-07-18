@@ -106,6 +106,7 @@ type model struct {
 	chatInput    textinput.Model
 	chatSpinner  spinner.Model
 	chatErr      error
+	chatViewport viewport.Model
 }
 
 type ChatState int

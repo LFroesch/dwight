@@ -78,6 +78,7 @@ func main() {
 
 	m.chatState = ChatStateInit
 	m.chatMessages = []ChatMessage{}
+	m.chatViewport = viewport.New(m.width-6, m.height-8)
 
 	menuColumns := []table.Column{
 		{Title: "Option", Width: 30},

@@ -502,47 +502,52 @@ CONFIGURATION:
 }
 
 func (m model) viewChat() string {
-	titleStyle := lipgloss.NewStyle().
+	// Header
+	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true)
-	title := titleStyle.Render("🤖 Ollama Chat")
+		Bold(true).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		Padding(0, 1)
+	header := headerStyle.Render("🤖 Ollama Chat")
 
-	var content strings.Builder
-	content.WriteString(title + "\n\n")
-
+	// Footer
+	footerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		Padding(0, 1)
+	
+	var footer string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		content.WriteString(fmt.Sprintf("%s Checking model availability...\n", m.chatSpinner.View()))
+		footer = footerStyle.Render("Checking model availability...")
 	case ChatStateError:
-		content.WriteString(fmt.Sprintf("❌ Error: %v\n", m.chatErr))
-		content.WriteString("\nPress Esc to return to menu")
+		footer = footerStyle.Render("❌ Error - Press Esc to return to menu")
 	case ChatStateReady:
-		// Show chat history
-		for _, msg := range m.chatMessages {
-			if msg.Role == "user" {
-				content.WriteString(fmt.Sprintf("👤 You: %s\n\n", msg.Content))
-			} else {
-				content.WriteString(fmt.Sprintf("🤖 Assistant: %s\n\n", msg.Content))
-			}
-		}
-
-		content.WriteString("Type your message:\n")
-		content.WriteString(m.chatInput.View())
-		content.WriteString("\n\nPress Enter to send, Esc to return to menu")
+		footer = footerStyle.Render("Type your message: " + m.chatInput.View() + " | Enter: send, Esc: menu")
 	case ChatStateLoading:
-		// Show chat history + loading
-		for _, msg := range m.chatMessages {
-			if msg.Role == "user" {
-				content.WriteString(fmt.Sprintf("👤 You: %s\n\n", msg.Content))
-			} else {
-				content.WriteString(fmt.Sprintf("🤖 Assistant: %s\n\n", msg.Content))
-			}
-		}
-
-		content.WriteString(fmt.Sprintf("%s Thinking...\n", m.chatSpinner.View()))
+		footer = footerStyle.Render(fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
 	}
 
-	return content.String()
+	// Content area with viewport
+	contentStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		Padding(0, 1)
+	
+	var content string
+	switch m.chatState {
+	case ChatStateInit, ChatStateCheckingModel:
+		content = contentStyle.Render(fmt.Sprintf("%s Checking model availability...\n", m.chatSpinner.View()))
+	case ChatStateError:
+		content = contentStyle.Render(fmt.Sprintf("❌ Error: %v\n", m.chatErr))
+	default:
+		content = contentStyle.Render(m.chatViewport.View())
+	}
+
+	// Layout: header + content + footer
+	return lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
 }
 
 func (m model) editView() string {
