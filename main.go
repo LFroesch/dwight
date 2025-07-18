@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -66,8 +67,17 @@ func main() {
 
 	m.loadProjectMetadata()
 
-	m.textInput = textinput.New()
-	m.textInput.CharLimit = 200
+	m.chatInput = textinput.New()
+	m.chatInput.Placeholder = "Type your message..."
+	m.chatInput.CharLimit = 500
+	m.chatInput.Width = 100
+
+	m.chatSpinner = spinner.New()
+	m.chatSpinner.Spinner = spinner.Dot
+	m.chatSpinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	m.chatState = ChatStateInit
+	m.chatMessages = []ChatMessage{}
 
 	menuColumns := []table.Column{
 		{Title: "Option", Width: 30},

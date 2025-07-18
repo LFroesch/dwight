@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -100,6 +101,36 @@ type model struct {
 	lastUpdate   time.Time
 	cursor       int
 	fromGlobal   bool
+	chatState    ChatState
+	chatMessages []ChatMessage
+	chatInput    textinput.Model
+	chatSpinner  spinner.Model
+	chatErr      error
+}
+
+type ChatState int
+
+const (
+	ChatStateInit ChatState = iota
+	ChatStateCheckingModel
+	ChatStateReady
+	ChatStateLoading
+	ChatStateError
+)
+
+type ChatMessage struct {
+	Role    string
+	Content string
+}
+
+type CheckModelMsg struct {
+	Available bool
+	Err       error
+}
+
+type ResponseMsg struct {
+	Content string
+	Err     error
 }
 
 func showStatus(msg string) tea.Cmd {

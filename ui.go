@@ -47,9 +47,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDetails(msg)
 		case ViewCreate:
 			return m.updateCreate(msg)
-		case ViewChatPlaceholder, ViewGlobalResourcesPlaceholder, ViewSettingsPlaceholder, ViewCleanupPlaceholder:
+		case ViewGlobalResourcesPlaceholder, ViewSettingsPlaceholder, ViewCleanupPlaceholder:
 			return m.updatePlaceholder(msg)
+		case ViewChatPlaceholder:
+			return m.updateChat(msg)
 		}
+
+	case CheckModelMsg:
+		if msg.Err != nil {
+			m.chatErr = msg.Err
+			m.chatState = ChatStateError
+		} else {
+			m.chatState = ChatStateReady
+		}
+		return m, nil
+
+	case ResponseMsg:
+		if msg.Err != nil {
+			m.chatErr = msg.Err
+			m.chatState = ChatStateError
+		} else {
+			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: msg.Content})
+			m.chatState = ChatStateReady
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -65,7 +86,15 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 0:
 			m.viewMode = ViewResourceManager
 		case 1:
+			// Replace the existing case 1 with this:
 			m.viewMode = ViewChatPlaceholder
+			m.chatState = ChatStateCheckingModel
+			m.chatInput.Focus()
+			m.chatMessages = []ChatMessage{} // Clear previous messages
+			return m, tea.Batch(
+				checkOllamaModel(),
+				m.chatSpinner.Tick,
+			)
 		case 2:
 			m.viewMode = ViewGlobalResourcesPlaceholder
 			m.scanGlobalResources()
@@ -81,6 +110,33 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.menuTable, cmd = m.menuTable.Update(msg)
+	return m, cmd
+}
+
+func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "esc", "q":
+		m.viewMode = ViewMenu
+		m.chatInput.Blur()
+		m.chatMessages = []ChatMessage{}
+		m.chatState = ChatStateInit
+		return m, nil
+	case "enter":
+		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
+			userMsg := m.chatInput.Value()
+			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
+			m.chatInput.SetValue("")
+			m.chatState = ChatStateLoading
+			return m, sendChatMessage(userMsg)
+		}
+	}
+
+	if m.chatState == ChatStateReady {
+		m.chatInput, cmd = m.chatInput.Update(msg)
+	}
+
 	return m, cmd
 }
 

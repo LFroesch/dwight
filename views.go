@@ -40,7 +40,7 @@ func (m model) View() string {
 	case ViewCreate:
 		return m.viewCreate()
 	case ViewChatPlaceholder:
-		return m.viewPlaceholder("Chat with Ollama", "🤖 AI chat interface coming soon...", "This feature will provide an interactive chat interface with Ollama models.")
+		return m.viewChat()
 	case ViewGlobalResourcesPlaceholder:
 		return m.viewGlobalResources()
 	case ViewSettingsPlaceholder:
@@ -499,6 +499,50 @@ CONFIGURATION:
 		contentStyle.Render(helpContent),
 		footer,
 	)
+}
+
+func (m model) viewChat() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("🤖 Ollama Chat")
+
+	var content strings.Builder
+	content.WriteString(title + "\n\n")
+
+	switch m.chatState {
+	case ChatStateInit, ChatStateCheckingModel:
+		content.WriteString(fmt.Sprintf("%s Checking model availability...\n", m.chatSpinner.View()))
+	case ChatStateError:
+		content.WriteString(fmt.Sprintf("❌ Error: %v\n", m.chatErr))
+		content.WriteString("\nPress Esc to return to menu")
+	case ChatStateReady:
+		// Show chat history
+		for _, msg := range m.chatMessages {
+			if msg.Role == "user" {
+				content.WriteString(fmt.Sprintf("👤 You: %s\n\n", msg.Content))
+			} else {
+				content.WriteString(fmt.Sprintf("🤖 Assistant: %s\n\n", msg.Content))
+			}
+		}
+
+		content.WriteString("Type your message:\n")
+		content.WriteString(m.chatInput.View())
+		content.WriteString("\n\nPress Enter to send, Esc to return to menu")
+	case ChatStateLoading:
+		// Show chat history + loading
+		for _, msg := range m.chatMessages {
+			if msg.Role == "user" {
+				content.WriteString(fmt.Sprintf("👤 You: %s\n\n", msg.Content))
+			} else {
+				content.WriteString(fmt.Sprintf("🤖 Assistant: %s\n\n", msg.Content))
+			}
+		}
+
+		content.WriteString(fmt.Sprintf("%s Thinking...\n", m.chatSpinner.View()))
+	}
+
+	return content.String()
 }
 
 func (m model) editView() string {
