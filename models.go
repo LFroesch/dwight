@@ -1,9 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var defaultProfiles = []ModelProfile{
@@ -25,6 +32,60 @@ var defaultProfiles = []ModelProfile{
 		SystemPrompt: "You are a creative writing assistant. Be imaginative and descriptive.",
 		Temperature:  0.9,
 	},
+}
+
+func pullOllamaModel(modelName string) tea.Cmd {
+	return func() tea.Msg {
+		// Ensure container is running
+		if err := ensureOllamaContainer(); err != nil {
+			return ModelPullMsg{Err: err}
+		}
+
+		client := &http.Client{Timeout: 10 * time.Minute} // Long timeout for downloads
+
+		pullReq := map[string]string{"name": modelName}
+		jsonData, _ := json.Marshal(pullReq)
+
+		resp, err := client.Post(ollamaURL+"/api/pull", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return ModelPullMsg{Err: err}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return ModelPullMsg{Err: fmt.Errorf("pull failed with status: %d", resp.StatusCode)}
+		}
+
+		// Read the streaming response
+		decoder := json.NewDecoder(resp.Body)
+		var lastStatus string
+
+		for {
+			var pullResp struct {
+				Status    string `json:"status"`
+				Total     int64  `json:"total"`
+				Completed int64  `json:"completed"`
+			}
+
+			if err := decoder.Decode(&pullResp); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return ModelPullMsg{Err: err}
+			}
+
+			lastStatus = pullResp.Status
+		}
+
+		return ModelPullMsg{Success: true, Status: lastStatus}
+	}
+}
+
+// Add message type
+type ModelPullMsg struct {
+	Success bool
+	Status  string
+	Err     error
 }
 
 func (m *model) loadModelConfig() {

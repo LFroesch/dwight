@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,79 @@ import (
 
 func (m model) Init() tea.Cmd {
 	return tickCmd()
+}
+
+func (m model) updateModelManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.viewMode = ViewMenu
+		return m, nil
+	case "up", "k":
+		if m.modelSelection > 0 {
+			m.modelSelection--
+		}
+	case "down", "j":
+		if m.modelSelection < len(m.modelConfig.Profiles)-1 {
+			m.modelSelection++
+		}
+	case "enter":
+		m.modelConfig.CurrentProfile = m.modelSelection
+		m.saveModelConfig()
+		return m, showStatus(fmt.Sprintf("✅ Default profile set to: %s", m.modelConfig.Profiles[m.modelSelection].Name))
+	case "n":
+		m.viewMode = ViewModelCreate
+		m.modelInputs = make([]textinput.Model, 4)
+
+		// Profile name
+		m.modelInputs[0] = textinput.New()
+		m.modelInputs[0].Placeholder = "My Custom Assistant"
+		m.modelInputs[0].Focus()
+
+		// Model name
+		m.modelInputs[1] = textinput.New()
+		m.modelInputs[1].Placeholder = "llama3.2:3b"
+
+		// System prompt
+		m.modelInputs[2] = textinput.New()
+		m.modelInputs[2].Placeholder = "You are a helpful assistant..."
+		m.modelInputs[2].CharLimit = 500
+
+		// Temperature
+		m.modelInputs[3] = textinput.New()
+		m.modelInputs[3].Placeholder = "0.7"
+		m.modelInputs[3].CharLimit = 3
+
+		return m, nil
+	case "p":
+		// Pull the model from the currently selected profile
+		if m.modelSelection < len(m.modelConfig.Profiles) {
+			selectedModel := m.modelConfig.Profiles[m.modelSelection].Model
+			m.viewMode = ViewModelPull
+			m.modelPullName = selectedModel
+			m.modelPullStatus = fmt.Sprintf("🔄 Pulling model: %s...", selectedModel)
+			m.modelPullError = nil
+			return m, pullOllamaModel(selectedModel)
+		}
+		return m, nil
+	case "d":
+		if len(m.modelConfig.Profiles) > 1 && m.modelSelection < len(m.modelConfig.Profiles) {
+			// Remove the selected profile
+			m.modelConfig.Profiles = append(
+				m.modelConfig.Profiles[:m.modelSelection],
+				m.modelConfig.Profiles[m.modelSelection+1:]...,
+			)
+			if m.modelConfig.CurrentProfile >= len(m.modelConfig.Profiles) {
+				m.modelConfig.CurrentProfile = len(m.modelConfig.Profiles) - 1
+			}
+			if m.modelSelection >= len(m.modelConfig.Profiles) {
+				m.modelSelection = len(m.modelConfig.Profiles) - 1
+			}
+			m.saveModelConfig()
+			return m, showStatus("🗑️ Profile deleted")
+		}
+		return m, showStatus("❌ Cannot delete last profile")
+	}
+	return m, nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -53,6 +127,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePlaceholder(msg)
 		case ViewChatPlaceholder:
 			return m.updateChat(msg)
+		case ViewModelManager:
+			return m.updateModelManager(msg)
+		case ViewModelCreate:
+			return m.updateModelCreate(msg)
+		case ViewModelPull:
+			return m.updateModelPull(msg)
 		}
 
 	case spinner.TickMsg:
@@ -90,8 +170,87 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateChatViewport()
 		}
 		return m, nil
+
+	case ModelPullMsg:
+		if msg.Err != nil {
+			m.modelPullError = msg.Err
+			m.modelPullStatus = ""
+		} else {
+			m.modelPullStatus = fmt.Sprintf("✅ Successfully pulled model: %s", m.modelPullName)
+		}
+		return m, nil
 	}
 
+	return m, nil
+}
+
+func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.viewMode = ViewModelManager
+		m.modelInputs = nil
+		return m, nil
+	case "enter":
+		// Validate and save new profile
+		if len(m.modelInputs) >= 4 && m.modelInputs[0].Value() != "" && m.modelInputs[1].Value() != "" {
+			temp := 0.7
+			if t := m.modelInputs[3].Value(); t != "" {
+				if parsed, err := strconv.ParseFloat(t, 64); err == nil && parsed >= 0 && parsed <= 1 {
+					temp = parsed
+				}
+			}
+
+			newProfile := ModelProfile{
+				Name:         m.modelInputs[0].Value(),
+				Model:        m.modelInputs[1].Value(),
+				SystemPrompt: m.modelInputs[2].Value(),
+				Temperature:  temp,
+			}
+
+			m.modelConfig.Profiles = append(m.modelConfig.Profiles, newProfile)
+			m.saveModelConfig()
+			m.viewMode = ViewModelManager
+			m.modelInputs = nil
+			return m, showStatus(fmt.Sprintf("✅ Profile '%s' created", newProfile.Name))
+		}
+		return m, showStatus("❌ Please fill in at least name and model")
+	case "tab":
+		if len(m.modelInputs) > 0 {
+			currentField := -1
+			for i, input := range m.modelInputs {
+				if input.Focused() {
+					currentField = i
+					break
+				}
+			}
+			if currentField >= 0 {
+				m.modelInputs[currentField].Blur()
+				nextField := (currentField + 1) % len(m.modelInputs)
+				m.modelInputs[nextField].Focus()
+			}
+		}
+		return m, nil
+	}
+
+	// Update the focused input
+	for i := range m.modelInputs {
+		if m.modelInputs[i].Focused() {
+			var cmd tea.Cmd
+			m.modelInputs[i], cmd = m.modelInputs[i].Update(msg)
+			return m, cmd
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateModelPull(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.viewMode = ViewModelManager
+		m.modelPullStatus = ""
+		m.modelPullError = nil
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -131,6 +290,9 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 6:
 			m.viewMode = ViewCleanupChats
 		case 7:
+			m.viewMode = ViewModelManager
+			m.modelSelection = m.modelConfig.CurrentProfile
+		case 8:
 			return m, tea.Quit
 		}
 		return m, nil

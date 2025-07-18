@@ -50,9 +50,117 @@ func (m model) View() string {
 		return m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
 	case ViewCleanupChats:
 		return m.viewCleanupChats()
+	case ViewModelManager:
+		return m.viewModelManager()
+	case ViewModelCreate:
+		return m.viewModelCreate()
+	case ViewModelPull:
+		return m.viewModelPull()
 	}
 
 	return ""
+}
+
+func (m model) viewModelManager() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("🤖 Model Manager")
+
+	selectedStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#7C3AED")).
+		Foreground(lipgloss.Color("#F3F4F6")).
+		Bold(true)
+
+	normalStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E5E7EB"))
+
+	var content strings.Builder
+	content.WriteString("📋 Available Profiles:\n\n")
+
+	for i, profile := range m.modelConfig.Profiles {
+		indicator := "  "
+		if i == m.modelConfig.CurrentProfile {
+			indicator = "✓ "
+		}
+
+		line := fmt.Sprintf("%s%-20s | %-25s | Temp: %.1f",
+			indicator, profile.Name, profile.Model, profile.Temperature)
+
+		if i == m.modelSelection {
+			content.WriteString(selectedStyle.Render("> " + line))
+		} else {
+			content.WriteString(normalStyle.Render("  " + line))
+		}
+		content.WriteString("\n")
+	}
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		Render("Commands: ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Enter: set default") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n: new profile, p: pull model, d: delete") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
+}
+
+func (m model) viewModelCreate() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("📝 Create New Profile")
+
+	var fields []string
+	labels := []string{"Profile Name:", "Model Name:", "System Prompt:", "Temperature (0.0-1.0):"}
+
+	for i, input := range m.modelInputs {
+		labelStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#34D399"))
+
+		label := labelStyle.Render(labels[i])
+		fields = append(fields, label+"\n"+input.View())
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Top, fields...)
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		Render("Commands: ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
+}
+
+func (m model) viewModelPull() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("📥 Pull Model from Ollama")
+
+	var content string
+	if m.modelPullError != nil {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#EF4444")).
+			Bold(true)
+		content = errorStyle.Render(fmt.Sprintf("❌ Error pulling %s: %v", m.modelPullName, m.modelPullError))
+	} else {
+		statusStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FBBF24"))
+		content = statusStyle.Render(m.modelPullStatus)
+	}
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		Render("Commands: ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back to model manager")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
 }
 
 func (m model) viewCleanupChats() string {

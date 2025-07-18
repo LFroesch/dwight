@@ -111,11 +111,12 @@ func main() {
 	menuRows := []table.Row{
 		{"Resource Manager", "Manage AI resources, templates, and prompts"},
 		{"Chat with Ollama", "Interactive AI chat interface"},
-		{"View Global Resources", "Browse system-wide AI resources (Coming Soon)"},
+		{"View Global Resources", "Browse system-wide AI resources"},
 		{"Settings", "Configure Dwight preferences (Coming Soon)"},
 		{"Stop Ollama", "Stop Ollama container to free memory"},
 		{"Clean Up Old Resources", "Remove unused or outdated resources (Coming Soon)"},
 		{"Clean Up Project Chat Logs", "Remove old chat logs from this project"},
+		{"Model Manager", "Manage AI models and profiles"},
 		{"Quit", "Exit Dwight"},
 	}
 	menuTable.SetRows(menuRows)

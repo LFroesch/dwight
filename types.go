@@ -79,6 +79,9 @@ const (
 	ViewSettingsPlaceholder
 	ViewCleanupPlaceholder
 	ViewCleanupChats
+	ViewModelManager
+	ViewModelCreate
+	ViewModelPull
 )
 
 type statusMsg struct {
@@ -88,41 +91,45 @@ type statusMsg struct {
 type tickMsg time.Time
 
 type model struct {
-	config         Config
-	resources      []AIResource
-	filteredRes    []AIResource
-	globalRes      []AIResource
-	table          table.Model
-	viewport       viewport.Model
-	textInput      textinput.Model
-	inputs         []textinput.Model
-	menuTable      table.Model
-	viewMode       ViewMode
-	width          int
-	height         int
-	statusMsg      string
-	statusExpiry   time.Time
-	currentDir     string
-	projectRoot    string
-	projectMeta    *ProjectMetadata
-	selectedRes    *AIResource
-	editMode       bool
-	editField      int
-	filterTag      string
-	configFile     string
-	showHelp       bool
-	lastUpdate     time.Time
-	cursor         int
-	fromGlobal     bool
-	chatState      ChatState
-	chatMessages   []ChatMessage
-	chatInput      textinput.Model
-	chatSpinner    spinner.Model
-	chatErr        error
-	chatViewport   viewport.Model
-	modelConfig    ModelConfig
-	modelSelection int
-	currentModel   string
+	config          Config
+	resources       []AIResource
+	filteredRes     []AIResource
+	globalRes       []AIResource
+	table           table.Model
+	viewport        viewport.Model
+	textInput       textinput.Model
+	inputs          []textinput.Model
+	menuTable       table.Model
+	viewMode        ViewMode
+	width           int
+	height          int
+	statusMsg       string
+	statusExpiry    time.Time
+	currentDir      string
+	projectRoot     string
+	projectMeta     *ProjectMetadata
+	selectedRes     *AIResource
+	editMode        bool
+	editField       int
+	filterTag       string
+	configFile      string
+	showHelp        bool
+	lastUpdate      time.Time
+	cursor          int
+	fromGlobal      bool
+	chatState       ChatState
+	chatMessages    []ChatMessage
+	chatInput       textinput.Model
+	chatSpinner     spinner.Model
+	chatErr         error
+	chatViewport    viewport.Model
+	modelConfig     ModelConfig
+	modelSelection  int
+	currentModel    string
+	modelInputs     []textinput.Model
+	modelPullName   string
+	modelPullStatus string
+	modelPullError  error
 }
 
 type ChatState int
