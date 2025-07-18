@@ -32,6 +32,40 @@ func (m model) updateModelManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.modelSelection < len(m.modelConfig.Profiles)-1 {
 			m.modelSelection++
 		}
+	case "e":
+		if m.modelSelection < len(m.modelConfig.Profiles) {
+			profile := m.modelConfig.Profiles[m.modelSelection]
+			m.viewMode = ViewModelCreate // Reuse the same view
+			m.modelInputs = make([]textinput.Model, 4)
+
+			// Profile name
+			m.modelInputs[0] = textinput.New()
+			m.modelInputs[0].SetValue(profile.Name)
+			m.modelInputs[0].CharLimit = 50
+
+			// Model name
+			m.modelInputs[1] = textinput.New()
+			m.modelInputs[1].SetValue(profile.Model)
+			m.modelInputs[1].CharLimit = 50
+
+			// System prompt
+			m.modelInputs[2] = textinput.New()
+			m.modelInputs[2].SetValue(profile.SystemPrompt)
+			m.modelInputs[2].CharLimit = 500
+
+			// Temperature
+			m.modelInputs[3] = textinput.New()
+			m.modelInputs[3].SetValue(fmt.Sprintf("%.1f", profile.Temperature))
+			m.modelInputs[3].CharLimit = 3
+
+			// Focus the first input
+			m.modelInputs[0].Focus()
+
+			// Store that we're editing, not creating
+			m.editField = m.modelSelection // Reuse this field to track which profile we're editing
+
+			return m, nil
+		}
 	case "enter":
 		m.modelConfig.CurrentProfile = m.modelSelection
 		m.saveModelConfig()
@@ -189,9 +223,10 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.viewMode = ViewModelManager
 		m.modelInputs = nil
+		m.editField = -1
 		return m, nil
 	case "enter":
-		// Validate and save new profile
+		// Validate and save profile
 		if len(m.modelInputs) >= 4 && m.modelInputs[0].Value() != "" && m.modelInputs[1].Value() != "" {
 			temp := 0.7
 			if t := m.modelInputs[3].Value(); t != "" {
@@ -207,11 +242,24 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				Temperature:  temp,
 			}
 
-			m.modelConfig.Profiles = append(m.modelConfig.Profiles, newProfile)
-			m.saveModelConfig()
-			m.viewMode = ViewModelManager
-			m.modelInputs = nil
-			return m, showStatus(fmt.Sprintf("✅ Profile '%s' created", newProfile.Name))
+			// Check if we're editing or creating
+			if m.editField >= 0 && m.editField < len(m.modelConfig.Profiles) {
+				// Editing existing profile
+				m.modelConfig.Profiles[m.editField] = newProfile
+				statusMsg := fmt.Sprintf("✅ Profile '%s' updated", newProfile.Name)
+				m.editField = -1 // Reset edit field
+				m.saveModelConfig()
+				m.viewMode = ViewModelManager
+				m.modelInputs = nil
+				return m, showStatus(statusMsg)
+			} else {
+				// Creating new profile
+				m.modelConfig.Profiles = append(m.modelConfig.Profiles, newProfile)
+				m.saveModelConfig()
+				m.viewMode = ViewModelManager
+				m.modelInputs = nil
+				return m, showStatus(fmt.Sprintf("✅ Profile '%s' created", newProfile.Name))
+			}
 		}
 		return m, showStatus("❌ Please fill in at least name and model")
 	case "tab":
@@ -230,6 +278,21 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case "shift+tab":
+		if len(m.modelInputs) > 0 {
+			currentField := -1
+			for i, input := range m.modelInputs {
+				if input.Focused() {
+					currentField = i
+					break
+				}
+			}
+			if currentField >= 0 {
+				m.modelInputs[currentField].Blur()
+				nextField := (currentField - 1 + len(m.modelInputs)) % len(m.modelInputs)
+				m.modelInputs[nextField].Focus()
+			}
+		}
 	}
 
 	// Update the focused input
@@ -323,6 +386,12 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		if m.chatState == ChatStateReady {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
+			m.saveModelConfig()
+			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
+		}
+	case "shift+tab":
+		if m.chatState == ChatStateReady {
+			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
 			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}

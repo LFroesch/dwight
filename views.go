@@ -100,7 +100,7 @@ func (m model) viewModelManager() string {
 		Render("Commands: ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Enter: set default") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n: new profile, p: pull model, d: delete") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n: new profile, e: edit, p: pull model, d: delete") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back")
 
@@ -111,7 +111,12 @@ func (m model) viewModelCreate() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#7C3AED")).
 		Bold(true)
-	title := titleStyle.Render("📝 Create New Profile")
+
+	title := "📝 Create New Profile"
+	if m.viewMode == ViewModelCreate && m.editField >= 0 && m.editField < len(m.modelConfig.Profiles) {
+		title = fmt.Sprintf("✏️ Edit Profile: %s", m.modelConfig.Profiles[m.editField].Name)
+	}
+	title = titleStyle.Render(title)
 
 	var fields []string
 	labels := []string{"Profile Name:", "Model Name:", "System Prompt:", "Temperature (0.0-1.0):"}

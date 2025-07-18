@@ -60,7 +60,7 @@ func main() {
 		height:      24,
 		viewMode:    ViewMenu,
 		editMode:    false,
-		editField:   0,
+		editField:   -1,
 		showHelp:    false,
 		lastUpdate:  time.Now(),
 	}
