@@ -66,6 +66,7 @@ const (
 	ViewGlobalResourcesPlaceholder
 	ViewSettingsPlaceholder
 	ViewCleanupPlaceholder
+	ViewCleanupChats
 )
 
 type statusMsg struct {
@@ -120,8 +121,11 @@ const (
 )
 
 type ChatMessage struct {
-	Role    string
-	Content string
+	Role         string
+	Content      string
+	Duration     time.Duration
+	PromptTokens int
+	TotalTokens  int
 }
 
 type CheckModelMsg struct {
@@ -130,8 +134,11 @@ type CheckModelMsg struct {
 }
 
 type ResponseMsg struct {
-	Content string
-	Err     error
+	Content      string
+	Duration     time.Duration
+	Err          error
+	PromptTokens int
+	TotalTokens  int
 }
 
 func showStatus(msg string) tea.Cmd {

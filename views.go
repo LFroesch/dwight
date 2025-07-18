@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -47,9 +48,55 @@ func (m model) View() string {
 		return m.viewPlaceholder("Settings", "⚙️ Settings configuration coming soon...", "This feature will provide options to configure Dwight preferences, paths, and behavior.")
 	case ViewCleanupPlaceholder:
 		return m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
+	case ViewCleanupChats:
+		return m.viewCleanupChats()
 	}
 
 	return ""
+}
+
+func (m model) viewCleanupChats() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("🧹 Clean Up Chat Logs")
+
+	contentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E5E7EB"))
+
+	chatsDir := filepath.Join(m.currentDir, "chats")
+	chatCount := 0
+	totalSize := int64(0)
+
+	if files, err := os.ReadDir(chatsDir); err == nil {
+		for _, file := range files {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), ".txt") {
+				chatCount++
+				if info, err := file.Info(); err == nil {
+					totalSize += info.Size()
+				}
+			}
+		}
+	}
+
+	content := contentStyle.Render(fmt.Sprintf(
+		"📁 Chat logs directory: %s\n\n"+
+			"📊 Total chat logs: %d\n"+
+			"💾 Total size: %s\n\n"+
+			"Press a number key to delete chats older than:\n"+
+			"  1 - 1 day\n"+
+			"  7 - 7 days\n"+
+			"  3 - 30 days\n"+
+			"  9 - 90 days\n"+
+			"  a - Delete ALL chat logs\n",
+		chatsDir, chatCount, formatSize(totalSize)))
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		Render("Commands: ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back to menu")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
 }
 
 func (m model) viewMenu() string {
@@ -509,7 +556,7 @@ func (m model) viewChat() string {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#374151")).
 		Padding(0, 1)
-	header := headerStyle.Render("🤖 Ollama Chat")
+	header := headerStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s", modelName))
 
 	// Footer
 	footerStyle := lipgloss.NewStyle().
@@ -517,7 +564,7 @@ func (m model) viewChat() string {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#374151")).
 		Padding(0, 1)
-	
+
 	var footer string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
@@ -535,7 +582,7 @@ func (m model) viewChat() string {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#374151")).
 		Padding(0, 1)
-	
+
 	var content string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:

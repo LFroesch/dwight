@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,11 +49,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDetails(msg)
 		case ViewCreate:
 			return m.updateCreate(msg)
-		case ViewGlobalResourcesPlaceholder, ViewSettingsPlaceholder, ViewCleanupPlaceholder:
+		case ViewGlobalResourcesPlaceholder, ViewSettingsPlaceholder, ViewCleanupPlaceholder, ViewCleanupChats:
 			return m.updatePlaceholder(msg)
 		case ViewChatPlaceholder:
 			return m.updateChat(msg)
 		}
+
+	case spinner.TickMsg:
+		if m.chatState == ChatStateLoading || m.chatState == ChatStateCheckingModel {
+			var cmd tea.Cmd
+			m.chatSpinner, cmd = m.chatSpinner.Update(msg)
+			m.updateChatViewport()
+			return m, cmd
+		}
+		return m, nil
 
 	case CheckModelMsg:
 		if msg.Err != nil {
@@ -68,7 +78,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatErr = msg.Err
 			m.chatState = ChatStateError
 		} else {
-			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: msg.Content})
+			m.chatMessages = append(m.chatMessages, ChatMessage{
+				Role:         "assistant",
+				Content:      msg.Content,
+				Duration:     msg.Duration,
+				PromptTokens: msg.PromptTokens,
+				TotalTokens:  msg.TotalTokens,
+			})
 			m.chatState = ChatStateReady
 			// Update viewport content and auto-scroll to bottom
 			m.updateChatViewport()
@@ -113,6 +129,8 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 5:
 			m.viewMode = ViewCleanupPlaceholder
 		case 6:
+			m.viewMode = ViewCleanupChats
+		case 7:
 			return m, tea.Quit
 		}
 		return m, nil
@@ -127,7 +145,12 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg.String() {
-	case "esc", "ctrl+c":
+	case "esc":
+		if len(m.chatMessages) > 0 {
+			if err := m.saveChatLog(); err == nil {
+				// Don't show error, just silently fail
+			}
+		}
 		m.viewMode = ViewMenu
 		m.chatInput.Blur()
 		m.chatMessages = []ChatMessage{}
@@ -143,7 +166,10 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateLoading
 			// Update viewport content and auto-scroll to bottom
 			m.updateChatViewport()
-			return m, sendChatMessage(userMsg)
+			return m, tea.Batch(
+				sendChatMessage(userMsg),
+				m.chatSpinner.Tick, // Add this to start the spinner animation
+			)
 		}
 	}
 
@@ -159,6 +185,43 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// Handle ViewCleanupChats separately first
+	if m.viewMode == ViewCleanupChats {
+		switch msg.String() {
+		case "esc", "q":
+			m.viewMode = ViewMenu
+			return m, nil
+		case "1":
+			if count, err := cleanupOldChats(m.currentDir, 1); err == nil {
+				m.viewMode = ViewMenu
+				return m, showStatus(fmt.Sprintf("🗑️ Deleted %d chat logs older than 1 day", count))
+			}
+		case "7":
+			if count, err := cleanupOldChats(m.currentDir, 7); err == nil {
+				m.viewMode = ViewMenu
+				return m, showStatus(fmt.Sprintf("🗑️ Deleted %d chat logs older than 7 days", count))
+			}
+		case "3":
+			if count, err := cleanupOldChats(m.currentDir, 30); err == nil {
+				m.viewMode = ViewMenu
+				return m, showStatus(fmt.Sprintf("🗑️ Deleted %d chat logs older than 30 days", count))
+			}
+		case "9":
+			if count, err := cleanupOldChats(m.currentDir, 90); err == nil {
+				m.viewMode = ViewMenu
+				return m, showStatus(fmt.Sprintf("🗑️ Deleted %d chat logs older than 90 days", count))
+			}
+		case "a":
+			if count, err := cleanupOldChats(m.currentDir, 0); err == nil {
+				m.viewMode = ViewMenu
+				return m, showStatus(fmt.Sprintf("🗑️ Deleted all %d chat logs", count))
+			}
+		}
+		return m, nil
+	}
+
+	// Handle other placeholder views
 	switch msg.String() {
 	case "esc", "q":
 		m.viewMode = ViewMenu
@@ -199,6 +262,7 @@ func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, showStatus("🔄 Global resources refreshed")
 		}
 	}
+
 	return m, cmd
 }
 

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -253,6 +255,7 @@ func checkOllamaModel() tea.Cmd {
 
 func sendChatMessage(userMsg string) tea.Cmd {
 	return func() tea.Msg {
+		startTime := time.Now()
 		client := &http.Client{Timeout: 60 * time.Second}
 
 		requestBody := map[string]interface{}{
@@ -279,14 +282,22 @@ func sendChatMessage(userMsg string) tea.Cmd {
 		}
 
 		var response struct {
-			Response string `json:"response"`
+			Response        string `json:"response"`
+			PromptEvalCount int    `json:"prompt_eval_count"`
+			EvalCount       int    `json:"eval_count"`
 		}
 
 		if err := json.Unmarshal(body, &response); err != nil {
 			return ResponseMsg{Err: fmt.Errorf("Failed to parse response: %v", err)}
 		}
-
-		return ResponseMsg{Content: response.Response, Err: nil}
+		duration := time.Since(startTime)
+		return ResponseMsg{
+			Content:      response.Response,
+			Duration:     duration,
+			PromptTokens: response.PromptEvalCount,
+			TotalTokens:  response.PromptEvalCount + response.EvalCount,
+			Err:          nil,
+		}
 	}
 }
 
@@ -327,6 +338,87 @@ func wrapText(text string, width int) string {
 	return result.String()
 }
 
+func (m *model) saveChatLog() error {
+	if len(m.chatMessages) == 0 {
+		return nil
+	}
+
+	// Create chats directory in current directory
+	chatsDir := filepath.Join(m.currentDir, "chats")
+	if err := os.MkdirAll(chatsDir, 0755); err != nil {
+		return err
+	}
+
+	// Format filename: 10_25_25_3_30_PM_model_name.txt
+	now := time.Now()
+	filename := fmt.Sprintf("%02d_%02d_%02d_%d_%02d_%s_%s.txt",
+		now.Month(), now.Day(), now.Year()%100,
+		now.Hour()%12, now.Minute(),
+		map[bool]string{true: "PM", false: "AM"}[now.Hour() >= 12],
+		strings.ReplaceAll(modelName, ":", "_"))
+
+	filepath := filepath.Join(chatsDir, filename)
+
+	var content strings.Builder
+	content.WriteString(fmt.Sprintf("Chat Log - %s\n", now.Format("January 2, 2006 3:04 PM")))
+	content.WriteString(fmt.Sprintf("Model: %s\n", modelName))
+	content.WriteString(strings.Repeat("=", 50) + "\n\n")
+
+	for _, msg := range m.chatMessages {
+		if msg.Role == "user" {
+			content.WriteString("USER:\n")
+			content.WriteString(msg.Content)
+			content.WriteString("\n\n")
+		} else {
+			content.WriteString("ASSISTANT")
+			if msg.Duration > 0 {
+				content.WriteString(fmt.Sprintf(" (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens))
+			}
+			content.WriteString(":\n")
+			content.WriteString(msg.Content)
+			content.WriteString("\n\n")
+		}
+		content.WriteString(strings.Repeat("-", 30) + "\n\n")
+	}
+
+	return os.WriteFile(filepath, []byte(content.String()), 0644)
+}
+
+func cleanupOldChats(dir string, daysOld int) (int, error) {
+	chatsDir := filepath.Join(dir, "chats")
+	if _, err := os.Stat(chatsDir); os.IsNotExist(err) {
+		return 0, nil // No chats directory
+	}
+
+	cutoffTime := time.Now().AddDate(0, 0, -daysOld)
+	deletedCount := 0
+
+	files, err := os.ReadDir(chatsDir)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		if info.ModTime().Before(cutoffTime) {
+			fullPath := filepath.Join(chatsDir, file.Name())
+			if err := os.Remove(fullPath); err == nil {
+				deletedCount++
+			}
+		}
+	}
+
+	return deletedCount, nil
+}
+
 // Helper function to render chat messages for viewport
 func renderChatHistory(messages []ChatMessage) string {
 	if len(messages) == 0 {
@@ -346,7 +438,15 @@ func renderChatHistory(messages []ChatMessage) string {
 			content.WriteString(messageContentStyle.Render(wrappedContent))
 			content.WriteString("\n")
 		} else {
-			content.WriteString(assistantStyle.Render("🤖 Assistant:"))
+			header := "🤖 Assistant:"
+			if msg.Duration > 0 {
+				durationStr := fmt.Sprintf(" (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens)
+				durationStyle := lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#9CA3AF")).
+					Italic(true)
+				header += durationStyle.Render(durationStr)
+			}
+			content.WriteString(assistantStyle.Render(header))
 			content.WriteString("\n")
 			// Wrap assistant message at ~80 characters
 			wrappedContent := wrapText(msg.Content, 80)
