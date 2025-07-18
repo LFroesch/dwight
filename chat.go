@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 
 const (
 	ollamaURL = "http://localhost:11434"
-	modelName = "qwen2.5:0.5b"
+	modelName = "qwen2.5-coder:7b"
 )
 
 // Chat message styles
@@ -59,48 +60,159 @@ var (
 			Bold(true)
 )
 
-func checkOllamaModel() tea.Cmd {
-	return func() tea.Msg {
-		client := &http.Client{Timeout: 10 * time.Second}
+// Docker management functions
+func ensureOllamaContainer() error {
+	// Check if Ollama container is running
+	cmd := exec.Command("docker", "ps", "--filter", "name=ollama", "--format", "{{.Names}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check Docker containers: %v", err)
+	}
 
-		resp, err := client.Get(ollamaURL + "/api/tags")
+	if strings.Contains(string(output), "ollama") {
+		return nil // Container is already running
+	}
+
+	// Check if container exists but is stopped
+	cmd = exec.Command("docker", "ps", "-a", "--filter", "name=ollama", "--format", "{{.Names}}")
+	output, err = cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check Docker containers: %v", err)
+	}
+
+	if strings.Contains(string(output), "ollama") {
+		// Container exists but is stopped, start it
+		cmd = exec.Command("docker", "start", "ollama")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to start Ollama container: %v", err)
+		}
+		// Wait a bit for container to start
+		time.Sleep(3 * time.Second)
+		return nil
+	}
+
+	// Container doesn't exist, create and run it
+	cmd = exec.Command("docker", "run", "-d",
+		"--name", "ollama",
+		"-p", "11434:11434",
+		"-v", "ollama:/root/.ollama",
+		"ollama/ollama")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run Ollama container: %v", err)
+	}
+
+	// Wait for container to start
+	time.Sleep(5 * time.Second)
+	return nil
+}
+
+func pullModelIfNeeded() error {
+	// Check if model exists by trying to list it
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Get(ollamaURL + "/api/tags")
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ollama: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Ollama API error: %d", resp.StatusCode)
+	}
+
+	var tags struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Check if model already exists
+	for _, model := range tags.Models {
+		if strings.HasPrefix(model.Name, modelName) {
+			return nil // Model already exists
+		}
+	}
+
+	// Model doesn't exist, start pulling it
+	pullReq := map[string]string{"name": modelName}
+	jsonData, _ := json.Marshal(pullReq)
+
+	// Start the pull process (don't wait for completion)
+	pullClient := &http.Client{Timeout: 60 * time.Second}
+	pullResp, err := pullClient.Post(ollamaURL+"/api/pull", "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to start model pull: %v", err)
+	}
+	defer pullResp.Body.Close()
+
+	if pullResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("model pull request failed: %d", pullResp.StatusCode)
+	}
+
+	// Consume the response to avoid connection issues
+	io.ReadAll(pullResp.Body)
+
+	// Now wait for the model to be available by polling
+	maxWaitTime := 10 * time.Minute
+	checkInterval := 10 * time.Second
+	startTime := time.Now()
+
+	for time.Since(startTime) < maxWaitTime {
+		// Check if model is now available
+		resp2, err := client.Get(ollamaURL + "/api/tags")
 		if err != nil {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Ollama not running. Start with: docker run -d -p 11434:11434 ollama/ollama")}
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Ollama API error: %d. Try: docker restart ollama", resp.StatusCode)}
+			time.Sleep(checkInterval)
+			continue
 		}
 
-		var tags struct {
+		if resp2.StatusCode != http.StatusOK {
+			resp2.Body.Close()
+			time.Sleep(checkInterval)
+			continue
+		}
+
+		var tags2 struct {
 			Models []struct {
 				Name string `json:"name"`
 			} `json:"models"`
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to decode response: %v", err)}
+		if err := json.NewDecoder(resp2.Body).Decode(&tags2); err != nil {
+			resp2.Body.Close()
+			time.Sleep(checkInterval)
+			continue
 		}
 
-		for _, model := range tags.Models {
+		// Check if model is now available
+		for _, model := range tags2.Models {
 			if strings.HasPrefix(model.Name, modelName) {
-				return CheckModelMsg{Available: true, Err: nil}
+				resp2.Body.Close()
+				return nil // Model is ready!
 			}
 		}
 
-		// Try to pull the model
-		pullReq := map[string]string{"name": modelName}
-		jsonData, _ := json.Marshal(pullReq)
+		resp2.Body.Close()
 
-		pullResp, err := client.Post(ollamaURL+"/api/pull", "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to pull model: %v", err)}
+		// Wait before checking again
+		time.Sleep(checkInterval)
+	}
+
+	return fmt.Errorf("model pull timed out after %v", maxWaitTime)
+}
+
+func checkOllamaModel() tea.Cmd {
+	return func() tea.Msg {
+		// First ensure Ollama container is running
+		if err := ensureOllamaContainer(); err != nil {
+			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to start Ollama container: %v", err)}
 		}
-		defer pullResp.Body.Close()
 
-		if pullResp.StatusCode != http.StatusOK {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Model pull failed: %d", pullResp.StatusCode)}
+		// Then check if the model is available and pull if needed
+		if err := pullModelIfNeeded(); err != nil {
+			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to ensure model availability: %v", err)}
 		}
 
 		return CheckModelMsg{Available: true, Err: nil}
@@ -146,6 +258,43 @@ func sendChatMessage(userMsg string) tea.Cmd {
 	}
 }
 
+// Helper function to wrap text to specified width
+func wrapText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return text
+	}
+	
+	var result strings.Builder
+	var line strings.Builder
+	
+	for _, word := range words {
+		// If adding this word would exceed width, start new line
+		if line.Len() > 0 && line.Len()+len(word)+1 > width {
+			result.WriteString(line.String())
+			result.WriteString("\n")
+			line.Reset()
+		}
+		
+		// Add word to current line
+		if line.Len() > 0 {
+			line.WriteString(" ")
+		}
+		line.WriteString(word)
+	}
+	
+	// Add remaining text
+	if line.Len() > 0 {
+		result.WriteString(line.String())
+	}
+	
+	return result.String()
+}
+
 // Helper function to render chat messages for viewport
 func renderChatHistory(messages []ChatMessage) string {
 	if len(messages) == 0 {
@@ -160,12 +309,16 @@ func renderChatHistory(messages []ChatMessage) string {
 		if msg.Role == "user" {
 			content.WriteString(userStyle.Render("👤 You:"))
 			content.WriteString("\n")
-			content.WriteString(messageContentStyle.Render(msg.Content))
+			// Wrap user message at ~80 characters
+			wrappedContent := wrapText(msg.Content, 80)
+			content.WriteString(messageContentStyle.Render(wrappedContent))
 			content.WriteString("\n")
 		} else {
 			content.WriteString(assistantStyle.Render("🤖 Assistant:"))
 			content.WriteString("\n")
-			content.WriteString(messageContentStyle.Render(msg.Content))
+			// Wrap assistant message at ~80 characters
+			wrappedContent := wrapText(msg.Content, 80)
+			content.WriteString(messageContentStyle.Render(wrappedContent))
 			content.WriteString("\n")
 		}
 	}

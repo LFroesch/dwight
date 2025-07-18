@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m model) Init() tea.Cmd {
@@ -94,7 +94,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateCheckingModel
 			m.chatInput.Focus()
 			m.chatMessages = []ChatMessage{} // Clear previous messages
-			m.updateChatViewport() // Initialize viewport with empty content
+			m.updateChatViewport()           // Initialize viewport with empty content
 			return m, tea.Batch(
 				checkOllamaModel(),
 				m.chatSpinner.Tick,
@@ -505,7 +505,7 @@ func (m *model) adjustLayout() {
 
 	m.viewport.Width = m.width - 4
 	m.viewport.Height = tableHeight
-	
+
 	// Also adjust chat viewport - account for header (3 lines) + footer (3 lines) + padding
 	m.chatViewport.Width = m.width - 6
 	m.chatViewport.Height = m.height - 8
@@ -540,7 +540,7 @@ func min(a, b int) int {
 
 func (m *model) updateChatViewport() {
 	var content strings.Builder
-	
+
 	if len(m.chatMessages) == 0 {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6B7280")).
@@ -549,11 +549,11 @@ func (m *model) updateChatViewport() {
 	} else {
 		content.WriteString(renderChatHistory(m.chatMessages))
 	}
-	
+
 	if m.chatState == ChatStateLoading {
 		content.WriteString(fmt.Sprintf("\n%s Thinking...\n", m.chatSpinner.View()))
 	}
-	
+
 	m.chatViewport.SetContent(content.String())
 	m.chatViewport.GotoBottom()
 }
