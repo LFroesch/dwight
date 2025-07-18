@@ -70,7 +70,30 @@ func stopOllamaContainer() error {
 	return nil
 }
 
+func ensureDockerImageExists() error {
+	// Check if Ollama image exists
+	cmd := exec.Command("docker", "images", "ollama/ollama", "--format", "{{.Repository}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check Docker images: %v", err)
+	}
+
+	if !strings.Contains(string(output), "ollama/ollama") {
+		// Pull the Ollama image
+		cmd = exec.Command("docker", "pull", "ollama/ollama")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to pull Ollama image: %v", err)
+		}
+	}
+	return nil
+}
+
 func ensureOllamaContainer() error {
+	// First ensure the Docker image exists
+	if err := ensureDockerImageExists(); err != nil {
+		return err
+	}
+
 	// Check if Ollama container is running
 	cmd := exec.Command("docker", "ps", "--filter", "name=ollama", "--format", "{{.Names}}")
 	output, err := cmd.Output()
@@ -230,7 +253,7 @@ func checkOllamaModel() tea.Cmd {
 
 func sendChatMessage(userMsg string) tea.Cmd {
 	return func() tea.Msg {
-		client := &http.Client{Timeout: 30 * time.Second}
+		client := &http.Client{Timeout: 60 * time.Second}
 
 		requestBody := map[string]interface{}{
 			"model":  modelName,
@@ -272,15 +295,15 @@ func wrapText(text string, width int) string {
 	if width <= 0 {
 		return text
 	}
-	
+
 	words := strings.Fields(text)
 	if len(words) == 0 {
 		return text
 	}
-	
+
 	var result strings.Builder
 	var line strings.Builder
-	
+
 	for _, word := range words {
 		// If adding this word would exceed width, start new line
 		if line.Len() > 0 && line.Len()+len(word)+1 > width {
@@ -288,19 +311,19 @@ func wrapText(text string, width int) string {
 			result.WriteString("\n")
 			line.Reset()
 		}
-		
+
 		// Add word to current line
 		if line.Len() > 0 {
 			line.WriteString(" ")
 		}
 		line.WriteString(word)
 	}
-	
+
 	// Add remaining text
 	if line.Len() > 0 {
 		result.WriteString(line.String())
 	}
-	
+
 	return result.String()
 }
 
