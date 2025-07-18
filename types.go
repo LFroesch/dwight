@@ -55,6 +55,18 @@ type ConfigFile struct {
 
 const ProjectMetaFile = ".dwight.json"
 
+type ModelProfile struct {
+	Name         string  `json:"name"`
+	Model        string  `json:"model"`
+	SystemPrompt string  `json:"system_prompt"`
+	Temperature  float64 `json:"temperature"`
+}
+
+type ModelConfig struct {
+	Profiles       []ModelProfile `json:"profiles"`
+	CurrentProfile int            `json:"current_profile"`
+}
+
 type ViewMode int
 
 const (
@@ -76,38 +88,41 @@ type statusMsg struct {
 type tickMsg time.Time
 
 type model struct {
-	config       Config
-	resources    []AIResource
-	filteredRes  []AIResource
-	globalRes    []AIResource
-	table        table.Model
-	viewport     viewport.Model
-	textInput    textinput.Model
-	inputs       []textinput.Model
-	menuTable    table.Model
-	viewMode     ViewMode
-	width        int
-	height       int
-	statusMsg    string
-	statusExpiry time.Time
-	currentDir   string
-	projectRoot  string
-	projectMeta  *ProjectMetadata
-	selectedRes  *AIResource
-	editMode     bool
-	editField    int
-	filterTag    string
-	configFile   string
-	showHelp     bool
-	lastUpdate   time.Time
-	cursor       int
-	fromGlobal   bool
-	chatState    ChatState
-	chatMessages []ChatMessage
-	chatInput    textinput.Model
-	chatSpinner  spinner.Model
-	chatErr      error
-	chatViewport viewport.Model
+	config         Config
+	resources      []AIResource
+	filteredRes    []AIResource
+	globalRes      []AIResource
+	table          table.Model
+	viewport       viewport.Model
+	textInput      textinput.Model
+	inputs         []textinput.Model
+	menuTable      table.Model
+	viewMode       ViewMode
+	width          int
+	height         int
+	statusMsg      string
+	statusExpiry   time.Time
+	currentDir     string
+	projectRoot    string
+	projectMeta    *ProjectMetadata
+	selectedRes    *AIResource
+	editMode       bool
+	editField      int
+	filterTag      string
+	configFile     string
+	showHelp       bool
+	lastUpdate     time.Time
+	cursor         int
+	fromGlobal     bool
+	chatState      ChatState
+	chatMessages   []ChatMessage
+	chatInput      textinput.Model
+	chatSpinner    spinner.Model
+	chatErr        error
+	chatViewport   viewport.Model
+	modelConfig    ModelConfig
+	modelSelection int
+	currentModel   string
 }
 
 type ChatState int

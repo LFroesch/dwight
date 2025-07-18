@@ -114,7 +114,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatMessages = []ChatMessage{} // Clear previous messages
 			m.updateChatViewport()           // Initialize viewport with empty content
 			return m, tea.Batch(
-				checkOllamaModel(),
+				m.checkOllamaModel(),
 				m.chatSpinner.Tick,
 			)
 		case 2:
@@ -158,6 +158,12 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Stop Ollama container to free memory when exiting chat
 		go stopOllamaContainer()
 		return m, nil
+	case "tab":
+		if m.chatState == ChatStateReady {
+			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
+			m.saveModelConfig()
+			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
+		}
 	case "enter":
 		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
 			userMsg := m.chatInput.Value()
@@ -167,7 +173,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Update viewport content and auto-scroll to bottom
 			m.updateChatViewport()
 			return m, tea.Batch(
-				sendChatMessage(userMsg),
+				sendChatMessage(userMsg, m.getCurrentProfile()),
 				m.chatSpinner.Tick, // Add this to start the spinner animation
 			)
 		}

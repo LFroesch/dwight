@@ -20,7 +20,6 @@ import (
 
 const (
 	ollamaURL = "http://localhost:11434"
-	modelName = "qwen2.5-coder:7b"
 )
 
 // Chat message styles
@@ -140,7 +139,7 @@ func ensureOllamaContainer() error {
 	return nil
 }
 
-func pullModelIfNeeded() error {
+func pullModelIfNeeded(modelName string) error {
 	// Check if model exists by trying to list it
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Get(ollamaURL + "/api/tags")
@@ -237,7 +236,7 @@ func pullModelIfNeeded() error {
 	return fmt.Errorf("model pull timed out after %v", maxWaitTime)
 }
 
-func checkOllamaModel() tea.Cmd {
+func (m *model) checkOllamaModel() tea.Cmd {
 	return func() tea.Msg {
 		// First ensure Ollama container is running
 		if err := ensureOllamaContainer(); err != nil {
@@ -245,7 +244,7 @@ func checkOllamaModel() tea.Cmd {
 		}
 
 		// Then check if the model is available and pull if needed
-		if err := pullModelIfNeeded(); err != nil {
+		if err := pullModelIfNeeded(m.getCurrentProfile().Model); err != nil {
 			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to ensure model availability: %v", err)}
 		}
 
@@ -253,15 +252,17 @@ func checkOllamaModel() tea.Cmd {
 	}
 }
 
-func sendChatMessage(userMsg string) tea.Cmd {
+func sendChatMessage(userMsg string, profile ModelProfile) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
 		client := &http.Client{Timeout: 60 * time.Second}
 
 		requestBody := map[string]interface{}{
-			"model":  modelName,
-			"prompt": userMsg,
-			"stream": false,
+			"model":       profile.Model,
+			"prompt":      userMsg,
+			"system":      profile.SystemPrompt,
+			"temperature": profile.Temperature,
+			"stream":      false,
 		}
 
 		jsonData, _ := json.Marshal(requestBody)
@@ -355,13 +356,14 @@ func (m *model) saveChatLog() error {
 		now.Month(), now.Day(), now.Year()%100,
 		now.Hour()%12, now.Minute(),
 		map[bool]string{true: "PM", false: "AM"}[now.Hour() >= 12],
-		strings.ReplaceAll(modelName, ":", "_"))
+		strings.ReplaceAll(m.getCurrentProfile().Model, ":", "_"))
 
 	filepath := filepath.Join(chatsDir, filename)
-
+	profileName, profileModel := m.getCurrentProfile().Name, m.getCurrentProfile().Model
 	var content strings.Builder
 	content.WriteString(fmt.Sprintf("Chat Log - %s\n", now.Format("January 2, 2006 3:04 PM")))
-	content.WriteString(fmt.Sprintf("Model: %s\n", modelName))
+	content.WriteString(fmt.Sprintf("Model: %s\n", profileModel))
+	content.WriteString(fmt.Sprintf("Profile: %s\n", profileName))
 	content.WriteString(strings.Repeat("=", 50) + "\n\n")
 
 	for _, msg := range m.chatMessages {

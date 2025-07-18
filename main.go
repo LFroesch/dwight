@@ -66,6 +66,7 @@ func main() {
 	}
 
 	m.loadProjectMetadata()
+	m.loadModelConfig()
 
 	m.chatInput = textinput.New()
 	m.chatInput.Placeholder = "Type your message..."

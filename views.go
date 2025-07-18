@@ -550,14 +550,18 @@ CONFIGURATION:
 
 func (m model) viewChat() string {
 	// Header
+	profile := m.getCurrentProfile()
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#7C3AED")).
 		Bold(true).
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#374151")).
 		Padding(0, 1)
-	header := headerStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s", modelName))
-
+	header := headerStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model))
+	modelHint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#6B7280")).
+		Italic(true).
+		Render("Press Tab to change model")
 	// Footer
 	footerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
@@ -594,7 +598,7 @@ func (m model) viewChat() string {
 	}
 
 	// Layout: header + content + footer
-	return lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, header, modelHint, content, footer)
 }
 
 func (m model) editView() string {
