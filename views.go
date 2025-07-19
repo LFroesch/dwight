@@ -388,9 +388,6 @@ func (m model) viewDetails() string {
 		Bold(true)
 	title := titleStyle.Render("📄 " + m.selectedRes.Name)
 
-	detailStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB"))
-
 	details := fmt.Sprintf("📁 %s\n", m.selectedRes.Path)
 	details += fmt.Sprintf("🏷️  %s\n", m.selectedRes.Type)
 	details += fmt.Sprintf("📊 %s\n", formatSize(m.selectedRes.Size))
@@ -406,39 +403,43 @@ func (m model) viewDetails() string {
 
 	details += "\n" + strings.Repeat("─", min(50, m.width-4)) + "\n"
 
-	footerParts := []string{
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA")).Render("Commands: "),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: scroll"),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • "),
-	}
-
+	footer := "Commands: ↑↓: scroll | PgUp/PgDn: page | Home/End: top/bottom"
 	if !m.fromGlobal {
-		footerParts = append(footerParts,
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("e: edit"),
-			lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • "),
-		)
+		footer += " | e: edit"
+	}
+	footer += " | esc: back"
+
+	// Custom file viewer content
+	var fileContent []string
+	if len(m.fileLines) == 0 {
+		fileContent = []string{"(empty file)"}
+	} else {
+		startLine := m.fileScrollPos
+		endLine := m.fileScrollPos + m.fileMaxLines
+
+		if startLine < 0 {
+			startLine = 0
+		}
+		if endLine > len(m.fileLines) {
+			endLine = len(m.fileLines)
+		}
+
+		if startLine < len(m.fileLines) {
+			fileContent = m.fileLines[startLine:endLine]
+		} else {
+			fileContent = []string{"No content"}
+		}
 	}
 
-	footerParts = append(footerParts,
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back"))
+	// Show scroll position in footer if needed
+	if len(m.fileLines) > m.fileMaxLines {
+		scrollInfo := fmt.Sprintf(" [%d/%d]", m.fileScrollPos+1, len(m.fileLines)-m.fileMaxLines+1)
+		footer += scrollInfo
+	}
 
-	footer := strings.Join(footerParts, "")
-
-	viewportStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
-		Padding(0, 1)
-
-	viewportContent := viewportStyle.Render(m.viewport.View())
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		title,
-		"",
-		detailStyle.Render(details),
-		viewportContent,
-		"",
-		footer,
-	)
+	result := title + "\n\n" + details + "\n"
+	result += strings.Join(fileContent, "\n") + "\n\n" + footer
+	return result
 }
 
 func (m model) viewCreate() string {
@@ -662,56 +663,58 @@ CONFIGURATION:
 }
 
 func (m model) viewChat() string {
-	// Header
 	profile := m.getCurrentProfile()
-	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
-		Padding(0, 1)
-	header := headerStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model))
-	modelHint := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B7280")).
-		Italic(true).
-		Render("Press Tab to change model")
-	// Footer
-	footerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#60A5FA")).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
-		Padding(0, 1)
+	header := fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model)
+	modelHint := "Press Tab to change model | ↑↓: scroll | Home/End: top/bottom"
+
+	var content []string
+	switch m.chatState {
+	case ChatStateInit, ChatStateCheckingModel:
+		content = []string{m.chatSpinner.View()}
+	case ChatStateError:
+		content = []string{fmt.Sprintf("❌ Error: %v", m.chatErr)}
+	case ChatStateReady, ChatStateLoading:
+		// Display visible portion of chat lines
+		startLine := m.chatScrollPos
+		endLine := m.chatScrollPos + m.chatMaxLines
+
+		if startLine < 0 {
+			startLine = 0
+		}
+		if endLine > len(m.chatLines) {
+			endLine = len(m.chatLines)
+		}
+
+		if startLine < len(m.chatLines) {
+			content = m.chatLines[startLine:endLine]
+		} else {
+			content = []string{"No content"}
+		}
+	}
 
 	var footer string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		footer = footerStyle.Render("Checking model availability...")
+		footer = "Checking model availability..."
 	case ChatStateError:
-		footer = footerStyle.Render("❌ Error - Press Esc to return to menu")
+		footer = "❌ Error - Press Esc to return to menu"
 	case ChatStateReady:
-		footer = footerStyle.Render("Type your message: " + m.chatInput.View() + " | Enter: send, Esc: menu")
+		footer = "Type your message: " + m.chatInput.View() + "\nEnter: send, Esc: menu"
 	case ChatStateLoading:
-		footer = footerStyle.Render(fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
+		footer = " "
 	}
 
-	// Content area with viewport
-	contentStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#374151")).
-		Padding(0, 1)
+	// Show scroll position
+	// if len(m.chatLines) > m.chatMaxLines {
+	// 	scrollInfo := fmt.Sprintf(" [%d/%d]", m.chatScrollPos+1, len(m.chatLines)-m.chatMaxLines+1)
+	// 	footer += scrollInfo
+	// }
 
-	var content string
-	switch m.chatState {
-	case ChatStateInit, ChatStateCheckingModel:
-		content = contentStyle.Render(fmt.Sprintf("%s Checking model availability...\n", m.chatSpinner.View()))
-	case ChatStateError:
-		content = contentStyle.Render(fmt.Sprintf("❌ Error: %v\n", m.chatErr))
-	default:
-		content = contentStyle.Render(m.chatViewport.View())
-	}
+	result := header + "\n" + modelHint + "\n\n"
+	result += strings.Join(content, "\n")
+	result += "\n\n" + footer
 
-	// Layout: header + content + footer
-	return lipgloss.JoinVertical(lipgloss.Left, header, modelHint, content, footer)
+	return result
 }
 
 func (m model) editView() string {

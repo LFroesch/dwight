@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (m model) Init() tea.Cmd {
@@ -141,6 +140,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.adjustLayout()
+		// If we're in chat mode, refresh the chat content with new dimensions
+		if m.viewMode == ViewChatPlaceholder {
+			m.updateChatLines()
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -173,7 +176,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.chatState == ChatStateLoading || m.chatState == ChatStateCheckingModel {
 			var cmd tea.Cmd
 			m.chatSpinner, cmd = m.chatSpinner.Update(msg)
-			m.updateChatViewport()
+			m.updateChatLines()
 			return m, cmd
 		}
 		return m, nil
@@ -200,8 +203,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				TotalTokens:  msg.TotalTokens,
 			})
 			m.chatState = ChatStateReady
-			// Update viewport content and auto-scroll to bottom
-			m.updateChatViewport()
+			// Update text viewer content and auto-scroll to bottom
+			m.updateChatLines()
 		}
 		return m, nil
 
@@ -334,7 +337,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateCheckingModel
 			m.chatInput.Focus()
 			m.chatMessages = []ChatMessage{} // Clear previous messages
-			m.updateChatViewport()           // Initialize viewport with empty content
+			m.updateChatLines()              // Initialize text viewer with empty content
 			return m, tea.Batch(
 				m.checkOllamaModel(),
 				m.chatSpinner.Tick,
@@ -401,8 +404,8 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
 			m.chatInput.SetValue("")
 			m.chatState = ChatStateLoading
-			// Update viewport content and auto-scroll to bottom
-			m.updateChatViewport()
+			// Update text viewer content and auto-scroll to bottom
+			m.updateChatLines()
 			return m, tea.Batch(
 				sendChatMessage(userMsg, m.getCurrentProfile()),
 				m.chatSpinner.Tick, // Add this to start the spinner animation
@@ -414,8 +417,25 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.chatInput, cmd = m.chatInput.Update(msg)
 	}
 
-	// Handle viewport scrolling for chat history
-	m.chatViewport, cmd = m.chatViewport.Update(msg)
+	// Handle scrolling for custom chat viewer
+	switch msg.String() {
+	case "pgup", "up":
+		m.chatScrollPos -= m.chatMaxLines / 2
+		if m.chatScrollPos < 0 {
+			m.chatScrollPos = 0
+		}
+	case "pgdown", "down":
+		m.chatScrollPos += m.chatMaxLines / 2
+		if m.chatScrollPos > len(m.chatLines)-m.chatMaxLines {
+			m.chatScrollPos = len(m.chatLines) - m.chatMaxLines
+		}
+	case "home":
+		m.chatScrollPos = 0
+	case "end":
+		if len(m.chatLines) > m.chatMaxLines {
+			m.chatScrollPos = len(m.chatLines) - m.chatMaxLines
+		}
+	}
 
 	return m, cmd
 }
@@ -483,9 +503,7 @@ func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.selectedRes != nil {
 				content, err := os.ReadFile(m.selectedRes.Path)
 				if err == nil {
-					m.viewport.Width = m.width - 4
-					m.viewport.Height = m.height - 10
-					m.viewport.SetContent(string(content))
+					m.updateFileLines(string(content))
 				}
 			}
 		}
@@ -612,9 +630,7 @@ func (m model) updateResourceManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedRes != nil {
 			content, err := os.ReadFile(m.selectedRes.Path)
 			if err == nil {
-				m.viewport.Width = m.width - 4
-				m.viewport.Height = m.height - 10
-				m.viewport.SetContent(string(content))
+				m.updateFileLines(string(content))
 			}
 		}
 		return m, nil
@@ -672,7 +688,25 @@ func (m model) updateDetails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
+	// Handle scrolling for file viewer
+	switch msg.String() {
+	case "pgup", "up":
+		m.fileScrollPos -= m.fileMaxLines / 2
+		if m.fileScrollPos < 0 {
+			m.fileScrollPos = 0
+		}
+	case "pgdown", "down":
+		m.fileScrollPos += m.fileMaxLines / 2
+		if m.fileScrollPos > len(m.fileLines)-m.fileMaxLines {
+			m.fileScrollPos = len(m.fileLines) - m.fileMaxLines
+		}
+	case "home":
+		m.fileScrollPos = 0
+	case "end":
+		if len(m.fileLines) > m.fileMaxLines {
+			m.fileScrollPos = len(m.fileLines) - m.fileMaxLines
+		}
+	}
 	return m, cmd
 }
 
@@ -817,11 +851,15 @@ func (m *model) adjustLayout() {
 	m.viewport.Width = m.width - 4
 	m.viewport.Height = tableHeight
 
-	// Also adjust chat viewport - account for header (3 lines) + footer (3 lines) + padding
-	m.chatViewport.Width = m.width - 6
-	m.chatViewport.Height = m.height - 8
-	if m.chatViewport.Height < 5 {
-		m.chatViewport.Height = 5
+	// Update custom viewers size
+	m.chatMaxLines = m.height - 10
+	if m.chatMaxLines < 5 {
+		m.chatMaxLines = 5
+	}
+
+	m.fileMaxLines = m.height - 10
+	if m.fileMaxLines < 5 {
+		m.fileMaxLines = 5
 	}
 }
 
@@ -849,22 +887,133 @@ func min(a, b int) int {
 	return b
 }
 
-func (m *model) updateChatViewport() {
-	var content strings.Builder
+func (m *model) updateChatLines() {
+	m.chatLines = []string{}
 
 	if len(m.chatMessages) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280")).
-			Italic(true)
-		content.WriteString(emptyStyle.Render("💬 Start a conversation with the AI assistant...\n\n"))
-	} else {
-		content.WriteString(renderChatHistory(m.chatMessages))
+		m.chatLines = append(m.chatLines, "💬 Start a conversation with the AI assistant...")
+		m.chatLines = append(m.chatLines, "")
+		return
+	}
+
+	for _, msg := range m.chatMessages {
+		if msg.Role == "user" {
+			m.chatLines = append(m.chatLines, "👤 You:")
+			// Split long lines
+			lines := strings.Split(msg.Content, "\n")
+			for _, line := range lines {
+				if len(line) > 80 {
+					// Simple word wrap
+					words := strings.Fields(line)
+					currentLine := ""
+					for _, word := range words {
+						if len(currentLine)+len(word)+1 > 80 {
+							if currentLine != "" {
+								m.chatLines = append(m.chatLines, currentLine)
+								currentLine = word
+							} else {
+								m.chatLines = append(m.chatLines, word)
+							}
+						} else {
+							if currentLine == "" {
+								currentLine = word
+							} else {
+								currentLine += " " + word
+							}
+						}
+					}
+					if currentLine != "" {
+						m.chatLines = append(m.chatLines, currentLine)
+					}
+				} else {
+					m.chatLines = append(m.chatLines, line)
+				}
+			}
+			m.chatLines = append(m.chatLines, "")
+		} else {
+			header := "🤖 Assistant:"
+			if msg.Duration > 0 {
+				header = fmt.Sprintf("🤖 Assistant: (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens)
+			}
+			m.chatLines = append(m.chatLines, header)
+
+			// Split long lines
+			lines := strings.Split(msg.Content, "\n")
+			for _, line := range lines {
+				if len(line) > 80 {
+					// Simple word wrap
+					words := strings.Fields(line)
+					currentLine := ""
+					for _, word := range words {
+						if len(currentLine)+len(word)+1 > 80 {
+							if currentLine != "" {
+								m.chatLines = append(m.chatLines, currentLine)
+								currentLine = word
+							} else {
+								m.chatLines = append(m.chatLines, word)
+							}
+						} else {
+							if currentLine == "" {
+								currentLine = word
+							} else {
+								currentLine += " " + word
+							}
+						}
+					}
+					if currentLine != "" {
+						m.chatLines = append(m.chatLines, currentLine)
+					}
+				} else {
+					m.chatLines = append(m.chatLines, line)
+				}
+			}
+			m.chatLines = append(m.chatLines, "")
+		}
 	}
 
 	if m.chatState == ChatStateLoading {
-		content.WriteString(fmt.Sprintf("\n%s Thinking...\n", m.chatSpinner.View()))
+		m.chatLines = append(m.chatLines, fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
 	}
 
-	m.chatViewport.SetContent(content.String())
-	m.chatViewport.GotoBottom()
+	// Auto scroll to bottom
+	if len(m.chatLines) > m.chatMaxLines {
+		m.chatScrollPos = len(m.chatLines) - m.chatMaxLines
+	}
+}
+
+func (m *model) updateFileLines(content string) {
+	m.fileLines = []string{}
+
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if len(line) > 80 {
+			// Simple word wrap
+			words := strings.Fields(line)
+			currentLine := ""
+			for _, word := range words {
+				if len(currentLine)+len(word)+1 > 80 {
+					if currentLine != "" {
+						m.fileLines = append(m.fileLines, currentLine)
+						currentLine = word
+					} else {
+						m.fileLines = append(m.fileLines, word)
+					}
+				} else {
+					if currentLine == "" {
+						currentLine = word
+					} else {
+						currentLine += " " + word
+					}
+				}
+			}
+			if currentLine != "" {
+				m.fileLines = append(m.fileLines, currentLine)
+			}
+		} else {
+			m.fileLines = append(m.fileLines, line)
+		}
+	}
+
+	// Start at top
+	m.fileScrollPos = 0
 }

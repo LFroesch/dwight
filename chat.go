@@ -304,39 +304,73 @@ func sendChatMessage(userMsg string, profile ModelProfile) tea.Cmd {
 
 // Helper function to wrap text to specified width
 func wrapText(text string, width int) string {
-	if width <= 0 {
+	if width <= 0 || width < 10 {
 		return text
 	}
 
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return text
-	}
+	// Handle multiple paragraphs
+	paragraphs := strings.Split(text, "\n")
+	var wrappedParagraphs []string
 
-	var result strings.Builder
-	var line strings.Builder
-
-	for _, word := range words {
-		// If adding this word would exceed width, start new line
-		if line.Len() > 0 && line.Len()+len(word)+1 > width {
-			result.WriteString(line.String())
-			result.WriteString("\n")
-			line.Reset()
+	for _, paragraph := range paragraphs {
+		if strings.TrimSpace(paragraph) == "" {
+			wrappedParagraphs = append(wrappedParagraphs, "")
+			continue
 		}
 
-		// Add word to current line
+		words := strings.Fields(paragraph)
+		if len(words) == 0 {
+			wrappedParagraphs = append(wrappedParagraphs, "")
+			continue
+		}
+
+		var result strings.Builder
+		var line strings.Builder
+
+		for _, word := range words {
+			// Handle very long words by breaking them
+			if len(word) > width {
+				// If current line has content, finish it first
+				if line.Len() > 0 {
+					result.WriteString(line.String())
+					result.WriteString("\n")
+					line.Reset()
+				}
+				// Break the long word
+				for len(word) > width {
+					result.WriteString(word[:width])
+					result.WriteString("\n")
+					word = word[width:]
+				}
+				if len(word) > 0 {
+					line.WriteString(word)
+				}
+				continue
+			}
+
+			// If adding this word would exceed width, start new line
+			if line.Len() > 0 && line.Len()+len(word)+1 > width {
+				result.WriteString(line.String())
+				result.WriteString("\n")
+				line.Reset()
+			}
+
+			// Add word to current line
+			if line.Len() > 0 {
+				line.WriteString(" ")
+			}
+			line.WriteString(word)
+		}
+
+		// Add remaining text
 		if line.Len() > 0 {
-			line.WriteString(" ")
+			result.WriteString(line.String())
 		}
-		line.WriteString(word)
+
+		wrappedParagraphs = append(wrappedParagraphs, result.String())
 	}
 
-	// Add remaining text
-	if line.Len() > 0 {
-		result.WriteString(line.String())
-	}
-
-	return result.String()
+	return strings.Join(wrappedParagraphs, "\n")
 }
 
 func (m *model) saveChatLog() error {
@@ -422,7 +456,7 @@ func cleanupOldChats(dir string, daysOld int) (int, error) {
 }
 
 // Helper function to render chat messages for viewport
-func renderChatHistory(messages []ChatMessage) string {
+func renderChatHistory(messages []ChatMessage, viewportWidth int) string {
 	if len(messages) == 0 {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#6B7280")).
@@ -430,15 +464,21 @@ func renderChatHistory(messages []ChatMessage) string {
 		return emptyStyle.Render("💬 Start a conversation with the AI assistant...\n\n")
 	}
 
+	// Calculate effective width for content (account for margins and padding)
+	contentWidth := viewportWidth - 6 // Leave room for margins and padding
+	if contentWidth < 20 {
+		contentWidth = 20 // Minimum width
+	}
+
 	var content strings.Builder
 	for _, msg := range messages {
 		if msg.Role == "user" {
 			content.WriteString(userStyle.Render("👤 You:"))
 			content.WriteString("\n")
-			// Wrap user message at ~80 characters
-			wrappedContent := wrapText(msg.Content, 80)
+			// Wrap user message to fit viewport
+			wrappedContent := wrapText(msg.Content, contentWidth)
 			content.WriteString(messageContentStyle.Render(wrappedContent))
-			content.WriteString("\n")
+			content.WriteString("\n\n")
 		} else {
 			header := "🤖 Assistant:"
 			if msg.Duration > 0 {
@@ -450,10 +490,10 @@ func renderChatHistory(messages []ChatMessage) string {
 			}
 			content.WriteString(assistantStyle.Render(header))
 			content.WriteString("\n")
-			// Wrap assistant message at ~80 characters
-			wrappedContent := wrapText(msg.Content, 80)
+			// Wrap assistant message to fit viewport
+			wrappedContent := wrapText(msg.Content, contentWidth)
 			content.WriteString(messageContentStyle.Render(wrappedContent))
-			content.WriteString("\n")
+			content.WriteString("\n\n")
 		}
 	}
 	return content.String()

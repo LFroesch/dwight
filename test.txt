@@ -1,0 +1,30 @@
+Line 1: This is a test file for debugging viewport scrolling
+Line 2: Each line should be distinct and not duplicate
+Line 3: When scrolling up and down these lines should stay in place
+Line 4: There should be no text corruption or duplication
+Line 5: This is line five
+Line 6: This is line six  
+Line 7: This is line seven
+Line 8: This is line eight
+Line 9: This is line nine
+Line 10: This is line ten
+Line 11: This is line eleven
+Line 12: This is line twelve
+Line 13: This is line thirteen
+Line 14: This is line fourteen
+Line 15: This is line fifteen
+Line 16: This is line sixteen
+Line 17: This is line seventeen
+Line 18: This is line eighteen
+Line 19: This is line nineteen
+Line 20: This is line twenty
+Line 21: This is line twenty-one
+Line 22: This is line twenty-two
+Line 23: This is line twenty-three
+Line 24: This is line twenty-four
+Line 25: This is line twenty-five
+Line 26: This is line twenty-six
+Line 27: This is line twenty-seven
+Line 28: This is line twenty-eight
+Line 29: This is line twenty-nine
+Line 30: This is line thirty

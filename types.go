@@ -122,7 +122,14 @@ type model struct {
 	chatInput       textinput.Model
 	chatSpinner     spinner.Model
 	chatErr         error
-	chatViewport    viewport.Model
+	// CUSTOM TEXT VIEWER - NO MORE VIEWPORT BULLSHIT
+	chatLines       []string
+	chatScrollPos   int
+	chatMaxLines    int
+	// File viewer
+	fileLines       []string
+	fileScrollPos   int
+	fileMaxLines    int
 	modelConfig     ModelConfig
 	modelSelection  int
 	currentModel    string
