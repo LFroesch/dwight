@@ -40,13 +40,13 @@ func (m model) View() string {
 		return m.viewDetails()
 	case ViewCreate:
 		return m.viewCreate()
-	case ViewChatPlaceholder:
+	case ViewChat:
 		return m.viewChat()
-	case ViewGlobalResourcesPlaceholder:
+	case ViewGlobalResources:
 		return m.viewGlobalResources()
-	case ViewSettingsPlaceholder:
-		return m.viewPlaceholder("Settings", "⚙️ Settings configuration coming soon...", "This feature will provide options to configure Dwight preferences, paths, and behavior.")
-	case ViewCleanupPlaceholder:
+	case ViewSettings:
+		return m.viewSettings()
+	case ViewCleanup:
 		return m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
 	case ViewCleanupChats:
 		return m.viewCleanupChats()
@@ -208,6 +208,41 @@ func (m model) viewCleanupChats() string {
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back to menu")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
+}
+
+func (m model) viewSettings() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("⚙️ Settings")
+
+	var fields []string
+	labels := []string{
+		"Main Prompt (prepended to all chats):",
+		"Memory Allotment (placeholder):",
+		"Your Name (shown instead of 'User'):",
+		"Chat Timeout (seconds):",
+	}
+
+	for i, input := range m.settingsInputs {
+		labelStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#34D399"))
+
+		label := labelStyle.Render(labels[i])
+		fields = append(fields, label+"\n"+input.View())
+	}
+
+	content := lipgloss.JoinVertical(lipgloss.Top, fields...)
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#60A5FA")).
+		Render("Commands: ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
 }
@@ -446,7 +481,7 @@ func (m model) viewCreate() string {
 }
 
 func (m model) viewPlaceholder(feature, emoji, description string) string {
-	if m.viewMode == ViewGlobalResourcesPlaceholder {
+	if m.viewMode == ViewGlobalResources {
 		return m.viewGlobalResources()
 	}
 

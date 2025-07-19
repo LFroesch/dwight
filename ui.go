@@ -141,7 +141,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.adjustLayout()
 		// If we're in chat mode, refresh the chat content with new dimensions
-		if m.viewMode == ViewChatPlaceholder {
+		if m.viewMode == ViewChat {
 			m.updateChatLines()
 		}
 		return m, nil
@@ -160,9 +160,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateDetails(msg)
 		case ViewCreate:
 			return m.updateCreate(msg)
-		case ViewGlobalResourcesPlaceholder, ViewSettingsPlaceholder, ViewCleanupPlaceholder, ViewCleanupChats:
+		case ViewGlobalResources, ViewCleanup, ViewCleanupChats:
 			return m.updatePlaceholder(msg)
-		case ViewChatPlaceholder:
+		case ViewChat:
 			return m.updateChat(msg)
 		case ViewModelManager:
 			return m.updateModelManager(msg)
@@ -170,6 +170,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateModelCreate(msg)
 		case ViewModelPull:
 			return m.updateModelPull(msg)
+		case ViewSettings:
+			return m.updateSettings(msg)
 		}
 
 	case spinner.TickMsg:
@@ -218,6 +220,76 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, nil
+}
+
+func (m model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.viewMode = ViewMenu
+		m.settingsInputs = nil
+		return m, nil
+	case "enter":
+		// Save settings
+		if len(m.settingsInputs) >= 4 {
+			m.appSettings.MainPrompt = m.settingsInputs[0].Value()
+			m.appSettings.MemoryAllotment = m.settingsInputs[1].Value()
+			m.appSettings.UserName = m.settingsInputs[2].Value()
+
+			if timeout := m.settingsInputs[3].Value(); timeout != "" {
+				if t, err := strconv.Atoi(timeout); err == nil && t > 0 {
+					m.appSettings.ChatTimeout = t
+				}
+			}
+
+			m.saveSettings()
+			m.viewMode = ViewMenu
+			m.settingsInputs = nil
+			return m, showStatus("✅ Settings saved")
+		}
+		return m, nil
+	case "tab":
+		if len(m.settingsInputs) > 0 {
+			currentField := -1
+			for i, input := range m.settingsInputs {
+				if input.Focused() {
+					currentField = i
+					break
+				}
+			}
+			if currentField >= 0 {
+				m.settingsInputs[currentField].Blur()
+				nextField := (currentField + 1) % len(m.settingsInputs)
+				m.settingsInputs[nextField].Focus()
+			}
+		}
+		return m, nil
+	case "shift+tab":
+		if len(m.settingsInputs) > 0 {
+			currentField := -1
+			for i, input := range m.settingsInputs {
+				if input.Focused() {
+					currentField = i
+					break
+				}
+			}
+			if currentField >= 0 {
+				m.settingsInputs[currentField].Blur()
+				nextField := (currentField - 1 + len(m.settingsInputs)) % len(m.settingsInputs)
+				m.settingsInputs[nextField].Focus()
+			}
+		}
+		return m, nil
+	}
+
+	// Update the focused input
+	for i := range m.settingsInputs {
+		if m.settingsInputs[i].Focused() {
+			var cmd tea.Cmd
+			m.settingsInputs[i], cmd = m.settingsInputs[i].Update(msg)
+			return m, cmd
+		}
+	}
 	return m, nil
 }
 
@@ -333,7 +405,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewResourceManager
 		case 1:
 			// Replace the existing case 1 with this:
-			m.viewMode = ViewChatPlaceholder
+			m.viewMode = ViewChat
 			m.chatState = ChatStateCheckingModel
 			m.chatInput.Focus()
 			m.chatMessages = []ChatMessage{} // Clear previous messages
@@ -343,16 +415,39 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.chatSpinner.Tick,
 			)
 		case 2:
-			m.viewMode = ViewGlobalResourcesPlaceholder
+			m.viewMode = ViewGlobalResources
 			m.scanGlobalResources()
 		case 3:
-			m.viewMode = ViewSettingsPlaceholder
+			m.viewMode = ViewSettings
+			// Initialize settings inputs
+			m.settingsInputs = make([]textinput.Model, 4)
+			
+			// Main Prompt
+			m.settingsInputs[0] = textinput.New()
+			m.settingsInputs[0].SetValue(m.appSettings.MainPrompt)
+			m.settingsInputs[0].CharLimit = 500
+			m.settingsInputs[0].Focus()
+			
+			// Memory Allotment
+			m.settingsInputs[1] = textinput.New()
+			m.settingsInputs[1].SetValue(m.appSettings.MemoryAllotment)
+			m.settingsInputs[1].CharLimit = 20
+			
+			// User Name
+			m.settingsInputs[2] = textinput.New()
+			m.settingsInputs[2].SetValue(m.appSettings.UserName)
+			m.settingsInputs[2].CharLimit = 50
+			
+			// Chat Timeout
+			m.settingsInputs[3] = textinput.New()
+			m.settingsInputs[3].SetValue(fmt.Sprintf("%d", m.appSettings.ChatTimeout))
+			m.settingsInputs[3].CharLimit = 10
 		case 4:
 			// Stop Ollama container
 			go stopOllamaContainer()
 			return m, showStatus("🛑 Ollama container stopped to free memory")
 		case 5:
-			m.viewMode = ViewCleanupPlaceholder
+			m.viewMode = ViewCleanup
 		case 6:
 			m.viewMode = ViewCleanupChats
 		case 7:
@@ -406,7 +501,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateLoading
 			m.updateChatLines()
 			return m, tea.Batch(
-				sendChatMessage(userMsg, m.getCurrentProfile()),
+				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings),
 				m.chatSpinner.Tick,
 			)
 		}
@@ -466,19 +561,19 @@ func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewMode = ViewMenu
 		return m, nil
 	case "up", "k":
-		if m.viewMode == ViewGlobalResourcesPlaceholder && len(m.globalRes) > 0 {
+		if m.viewMode == ViewGlobalResources && len(m.globalRes) > 0 {
 			if m.cursor > 0 {
 				m.cursor--
 			}
 		}
 	case "down", "j":
-		if m.viewMode == ViewGlobalResourcesPlaceholder && len(m.globalRes) > 0 {
+		if m.viewMode == ViewGlobalResources && len(m.globalRes) > 0 {
 			if m.cursor < len(m.globalRes)-1 {
 				m.cursor++
 			}
 		}
 	case "enter", " ", "v":
-		if m.viewMode == ViewGlobalResourcesPlaceholder && len(m.globalRes) > 0 && m.cursor < len(m.globalRes) {
+		if m.viewMode == ViewGlobalResources && len(m.globalRes) > 0 && m.cursor < len(m.globalRes) {
 			m.viewMode = ViewDetails
 			m.selectedRes = &m.globalRes[m.cursor]
 			m.fromGlobal = true
@@ -490,11 +585,11 @@ func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "e":
-		if m.viewMode == ViewGlobalResourcesPlaceholder {
+		if m.viewMode == ViewGlobalResources {
 			return m, nil
 		}
 	case "r":
-		if m.viewMode == ViewGlobalResourcesPlaceholder {
+		if m.viewMode == ViewGlobalResources {
 			m.scanGlobalResources()
 			return m, showStatus("🔄 Global resources refreshed")
 		}
@@ -654,7 +749,7 @@ func (m model) updateDetails(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q":
 		if m.fromGlobal {
-			m.viewMode = ViewGlobalResourcesPlaceholder
+			m.viewMode = ViewGlobalResources
 			m.fromGlobal = false
 		} else {
 			m.viewMode = ViewResourceManager
@@ -941,7 +1036,8 @@ func (m *model) updateChatLines() {
 
 	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
-			m.chatLines = append(m.chatLines, "👤 You:")
+			userLabel := "👤 " + m.appSettings.UserName + ":"
+			m.chatLines = append(m.chatLines, userLabel)
 			wrapped := wrapText(msg.Content, contentWidth)
 			m.chatLines = append(m.chatLines, wrapped...)
 			m.chatLines = append(m.chatLines, "")

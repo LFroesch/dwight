@@ -89,7 +89,7 @@ type ModelPullMsg struct {
 }
 
 func (m *model) loadModelConfig() {
-	configPath := filepath.Join(m.currentDir, ".dwight-models.json")
+	configPath := filepath.Join(filepath.Dir(m.configFile), ".dwight-models.json")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -109,7 +109,7 @@ func (m *model) loadModelConfig() {
 }
 
 func (m *model) saveModelConfig() {
-	configPath := filepath.Join(m.currentDir, ".dwight-models.json")
+	configPath := filepath.Join(filepath.Dir(m.configFile), ".dwight-models.json")
 	data, _ := json.MarshalIndent(m.modelConfig, "", "  ")
 	os.WriteFile(configPath, data, 0644)
 }

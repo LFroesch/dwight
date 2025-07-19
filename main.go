@@ -67,6 +67,7 @@ func main() {
 
 	m.loadProjectMetadata()
 	m.loadModelConfig()
+	m.loadSettings()
 
 	m.chatInput = textinput.New()
 	m.chatInput.Placeholder = "Type your message..."
@@ -115,7 +116,7 @@ func main() {
 		{"Resource Manager", "Manage AI resources, templates, and prompts"},
 		{"Chat with Ollama", "Interactive AI chat interface"},
 		{"View Global Resources", "Browse system-wide AI resources"},
-		{"Settings", "Configure Dwight preferences (Coming Soon)"},
+		{"Settings", "Configure Dwight preferences"},
 		{"Stop Ollama", "Stop Ollama container to free memory"},
 		{"Clean Up Old Resources", "Remove unused or outdated resources (Coming Soon)"},
 		{"Clean Up Project Chat Logs", "Remove old chat logs from this project"},

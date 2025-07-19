@@ -252,15 +252,22 @@ func (m *model) checkOllamaModel() tea.Cmd {
 	}
 }
 
-func sendChatMessage(userMsg string, profile ModelProfile) tea.Cmd {
+func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
-		client := &http.Client{Timeout: 180 * time.Second}
+		timeout := time.Duration(appSettings.ChatTimeout) * time.Second
+		client := &http.Client{Timeout: timeout}
+
+		// Prepend main prompt if it exists
+		systemPrompt := profile.SystemPrompt
+		if appSettings.MainPrompt != "" {
+			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
+		}
 
 		requestBody := map[string]interface{}{
 			"model":       profile.Model,
 			"prompt":      userMsg,
-			"system":      profile.SystemPrompt,
+			"system":      systemPrompt,
 			"temperature": profile.Temperature,
 			"stream":      false,
 		}

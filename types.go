@@ -74,10 +74,10 @@ const (
 	ViewResourceManager
 	ViewDetails
 	ViewCreate
-	ViewChatPlaceholder
-	ViewGlobalResourcesPlaceholder
-	ViewSettingsPlaceholder
-	ViewCleanupPlaceholder
+	ViewChat
+	ViewGlobalResources
+	ViewSettings
+	ViewCleanup
 	ViewCleanupChats
 	ViewModelManager
 	ViewModelCreate
@@ -122,11 +122,9 @@ type model struct {
 	chatInput       textinput.Model
 	chatSpinner     spinner.Model
 	chatErr         error
-	// CUSTOM TEXT VIEWER - NO MORE VIEWPORT BULLSHIT
 	chatLines       []string
 	chatScrollPos   int
 	chatMaxLines    int
-	// File viewer
 	fileLines       []string
 	fileScrollPos   int
 	fileMaxLines    int
@@ -137,6 +135,8 @@ type model struct {
 	modelPullName   string
 	modelPullStatus string
 	modelPullError  error
+	appSettings     AppSettings
+	settingsInputs  []textinput.Model
 }
 
 type ChatState int
