@@ -409,31 +409,12 @@ func (m model) viewDetails() string {
 	}
 	footer += " | esc: back"
 
-	// Custom file viewer content
-	var fileContent []string
-	if len(m.fileLines) == 0 {
-		fileContent = []string{"(empty file)"}
-	} else {
-		startLine := m.fileScrollPos
-		endLine := m.fileScrollPos + m.fileMaxLines
+	// Get visible file content using the new clean function
+	fileContent := m.getVisibleFileLines()
 
-		if startLine < 0 {
-			startLine = 0
-		}
-		if endLine > len(m.fileLines) {
-			endLine = len(m.fileLines)
-		}
-
-		if startLine < len(m.fileLines) {
-			fileContent = m.fileLines[startLine:endLine]
-		} else {
-			fileContent = []string{"No content"}
-		}
-	}
-
-	// Show scroll position in footer if needed
+	// Show scroll position if needed
 	if len(m.fileLines) > m.fileMaxLines {
-		scrollInfo := fmt.Sprintf(" [%d/%d]", m.fileScrollPos+1, len(m.fileLines)-m.fileMaxLines+1)
+		scrollInfo := fmt.Sprintf(" [%d/%d]", m.fileScrollPos+1, len(m.fileLines))
 		footer += scrollInfo
 	}
 
@@ -674,22 +655,7 @@ func (m model) viewChat() string {
 	case ChatStateError:
 		content = []string{fmt.Sprintf("❌ Error: %v", m.chatErr)}
 	case ChatStateReady, ChatStateLoading:
-		// Display visible portion of chat lines
-		startLine := m.chatScrollPos
-		endLine := m.chatScrollPos + m.chatMaxLines
-
-		if startLine < 0 {
-			startLine = 0
-		}
-		if endLine > len(m.chatLines) {
-			endLine = len(m.chatLines)
-		}
-
-		if startLine < len(m.chatLines) {
-			content = m.chatLines[startLine:endLine]
-		} else {
-			content = []string{"No content"}
-		}
+		content = m.getVisibleChatLines()
 	}
 
 	var footer string
@@ -701,14 +667,8 @@ func (m model) viewChat() string {
 	case ChatStateReady:
 		footer = "Type your message: " + m.chatInput.View() + "\nEnter: send, Esc: menu"
 	case ChatStateLoading:
-		footer = " "
+		footer = "Processing..."
 	}
-
-	// Show scroll position
-	// if len(m.chatLines) > m.chatMaxLines {
-	// 	scrollInfo := fmt.Sprintf(" [%d/%d]", m.chatScrollPos+1, len(m.chatLines)-m.chatMaxLines+1)
-	// 	footer += scrollInfo
-	// }
 
 	result := header + "\n" + modelHint + "\n\n"
 	result += strings.Join(content, "\n")

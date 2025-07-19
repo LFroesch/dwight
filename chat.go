@@ -255,7 +255,7 @@ func (m *model) checkOllamaModel() tea.Cmd {
 func sendChatMessage(userMsg string, profile ModelProfile) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
-		client := &http.Client{Timeout: 60 * time.Second}
+		client := &http.Client{Timeout: 180 * time.Second}
 
 		requestBody := map[string]interface{}{
 			"model":       profile.Model,
@@ -303,74 +303,68 @@ func sendChatMessage(userMsg string, profile ModelProfile) tea.Cmd {
 }
 
 // Helper function to wrap text to specified width
-func wrapText(text string, width int) string {
-	if width <= 0 || width < 10 {
-		return text
+func wrapText(text string, width int) []string {
+	if width < 10 {
+		width = 10
 	}
 
-	// Handle multiple paragraphs
+	var lines []string
 	paragraphs := strings.Split(text, "\n")
-	var wrappedParagraphs []string
 
 	for _, paragraph := range paragraphs {
 		if strings.TrimSpace(paragraph) == "" {
-			wrappedParagraphs = append(wrappedParagraphs, "")
+			lines = append(lines, "")
 			continue
 		}
 
 		words := strings.Fields(paragraph)
 		if len(words) == 0 {
-			wrappedParagraphs = append(wrappedParagraphs, "")
+			lines = append(lines, "")
 			continue
 		}
 
-		var result strings.Builder
-		var line strings.Builder
-
+		currentLine := ""
 		for _, word := range words {
-			// Handle very long words by breaking them
+			// If word is too long, break it
 			if len(word) > width {
-				// If current line has content, finish it first
-				if line.Len() > 0 {
-					result.WriteString(line.String())
-					result.WriteString("\n")
-					line.Reset()
+				if currentLine != "" {
+					lines = append(lines, currentLine)
+					currentLine = ""
 				}
-				// Break the long word
+				// Break the long word into chunks
 				for len(word) > width {
-					result.WriteString(word[:width])
-					result.WriteString("\n")
+					lines = append(lines, word[:width])
 					word = word[width:]
 				}
 				if len(word) > 0 {
-					line.WriteString(word)
+					currentLine = word
 				}
 				continue
 			}
 
-			// If adding this word would exceed width, start new line
-			if line.Len() > 0 && line.Len()+len(word)+1 > width {
-				result.WriteString(line.String())
-				result.WriteString("\n")
-				line.Reset()
+			// Check if adding this word would exceed width
+			testLine := currentLine
+			if testLine != "" {
+				testLine += " "
 			}
+			testLine += word
 
-			// Add word to current line
-			if line.Len() > 0 {
-				line.WriteString(" ")
+			if len(testLine) > width {
+				if currentLine != "" {
+					lines = append(lines, currentLine)
+				}
+				currentLine = word
+			} else {
+				currentLine = testLine
 			}
-			line.WriteString(word)
 		}
 
-		// Add remaining text
-		if line.Len() > 0 {
-			result.WriteString(line.String())
+		if currentLine != "" {
+			lines = append(lines, currentLine)
 		}
-
-		wrappedParagraphs = append(wrappedParagraphs, result.String())
 	}
 
-	return strings.Join(wrappedParagraphs, "\n")
+	return lines
 }
 
 func (m *model) saveChatLog() error {
@@ -453,48 +447,4 @@ func cleanupOldChats(dir string, daysOld int) (int, error) {
 	}
 
 	return deletedCount, nil
-}
-
-// Helper function to render chat messages for viewport
-func renderChatHistory(messages []ChatMessage, viewportWidth int) string {
-	if len(messages) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280")).
-			Italic(true)
-		return emptyStyle.Render("💬 Start a conversation with the AI assistant...\n\n")
-	}
-
-	// Calculate effective width for content (account for margins and padding)
-	contentWidth := viewportWidth - 6 // Leave room for margins and padding
-	if contentWidth < 20 {
-		contentWidth = 20 // Minimum width
-	}
-
-	var content strings.Builder
-	for _, msg := range messages {
-		if msg.Role == "user" {
-			content.WriteString(userStyle.Render("👤 You:"))
-			content.WriteString("\n")
-			// Wrap user message to fit viewport
-			wrappedContent := wrapText(msg.Content, contentWidth)
-			content.WriteString(messageContentStyle.Render(wrappedContent))
-			content.WriteString("\n\n")
-		} else {
-			header := "🤖 Assistant:"
-			if msg.Duration > 0 {
-				durationStr := fmt.Sprintf(" (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens)
-				durationStyle := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#9CA3AF")).
-					Italic(true)
-				header += durationStyle.Render(durationStr)
-			}
-			content.WriteString(assistantStyle.Render(header))
-			content.WriteString("\n")
-			// Wrap assistant message to fit viewport
-			wrappedContent := wrapText(msg.Content, contentWidth)
-			content.WriteString(messageContentStyle.Render(wrappedContent))
-			content.WriteString("\n\n")
-		}
-	}
-	return content.String()
 }

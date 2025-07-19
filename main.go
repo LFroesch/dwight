@@ -82,7 +82,7 @@ func main() {
 	// Initialize custom text viewer
 	m.chatLines = []string{}
 	m.chatScrollPos = 0
-	m.chatMaxLines = m.height - 10
+	m.chatMaxLines = m.height - 20
 
 	menuColumns := []table.Column{
 		{Title: "Option", Width: 30},
