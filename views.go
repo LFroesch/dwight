@@ -56,6 +56,8 @@ func (m model) View() string {
 		return m.viewModelCreate()
 	case ViewModelPull:
 		return m.viewModelPull()
+	case ViewConfirmDialog:
+		return m.viewConfirmDialog()
 	}
 
 	return ""
@@ -377,12 +379,14 @@ func (m model) viewResourceManager(errorStyle, successStyle, helpStyle lipgloss.
 			editStyle.Render("e: edit"),
 			editStyle.Render("n/a: add"),
 			editStyle.Render("f: search"),
-			editStyle.Render("t: template"),
+			editStyle.Render("s: sort"),
+			editStyle.Render("S: reverse"),
+			editStyle.Render("p: push to global"),
 			systemStyle.Render("d: delete"),
 			systemStyle.Render("r: refresh"),
 			systemStyle.Render("esc: menu"),
 		}
-		footer = helpStyle.Render("Commands: " + strings.Join(commandsHelp[:3], " • ") + " • " + strings.Join(commandsHelp[3:], " • "))
+		footer = helpStyle.Render("Commands: " + strings.Join(commandsHelp[:4], " • ") + " • " + strings.Join(commandsHelp[4:], " • "))
 	}
 
 	var parts []string
@@ -581,6 +585,8 @@ func (m model) viewGlobalResources() string {
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		actionStyle.Render("enter/v: view") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		actionStyle.Render("p: pull to project") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		actionStyle.Render("r: refresh") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		systemStyle.Render("esc: back")
@@ -631,18 +637,26 @@ Navigation:
 Actions:
     n/a           Create new resource
     e             Edit resource description
-    d             Delete resource
-    c             Create template from resource
-    t             Regenerate project template file
+    d             Delete resource (with confirmation)
+    p             Push resource to global (local view)
+                  Pull resource to project (global view)
     
 Filters & Search:
     f             Search by name, tags, description, or type
+    s             Cycle sort options (name/type/size/modified)
+    S             Reverse sort direction
     r             Refresh resource scan
     
 Other:
     ?             Toggle this help
     esc           Back to menu
     q             Quit application
+
+RESOURCE MANAGEMENT:
+    Push/Pull:    Copy resources between project and global locations
+    Global Path:  ~/.local/share/dwight/templates/
+    Project Path: [project]/templates/
+    Confirmation: All destructive actions require confirmation
 
 RESOURCE TYPES:
     template      Template files for reuse
@@ -718,7 +732,7 @@ func (m model) editView() string {
 	}
 
 	var fields []string
-	labels := []string{"Description:", "Tags:", "Type:"}
+	labels := []string{"Description:", "Tags:"}
 
 	for i, input := range m.inputs {
 		labelStyle := lipgloss.NewStyle().
@@ -755,6 +769,65 @@ func (m model) editView() string {
 		header,
 		"",
 		content,
+		"",
+		footer,
+	)
+}
+
+func (m model) viewConfirmDialog() string {
+	if m.confirmDialog == nil {
+		return ""
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#F59E0B")).
+		Bold(true)
+
+	var title string
+	switch m.confirmDialog.Action {
+	case ConfirmDelete:
+		title = "⚠️ Confirm Delete"
+	case ConfirmPush:
+		title = "📤 Confirm Push to Global"
+	case ConfirmPull:
+		title = "📥 Confirm Pull from Global"
+	default:
+		title = "⚠️ Confirm Action"
+	}
+
+	contentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E5E7EB")).
+		MarginTop(1).
+		MarginBottom(1)
+
+	content := contentStyle.Render(m.confirmDialog.Message)
+
+	buttonStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#374151")).
+		Foreground(lipgloss.Color("#F3F4F6")).
+		Padding(0, 2).
+		MarginRight(2)
+
+	yesButton := buttonStyle.Copy().
+		Background(lipgloss.Color("#EF4444")).
+		Render("Yes")
+
+	noButton := buttonStyle.Copy().
+		Background(lipgloss.Color("#6B7280")).
+		Render("No")
+
+	buttons := lipgloss.JoinHorizontal(lipgloss.Top, yesButton, noButton)
+
+	footer := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#9CA3AF")).
+		Render("y: Yes, n: No, esc: Cancel")
+
+	return lipgloss.JoinVertical(lipgloss.Center,
+		titleStyle.Render(title),
+		"",
+		content,
+		"",
+		buttons,
 		"",
 		footer,
 	)

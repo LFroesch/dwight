@@ -106,21 +106,17 @@ func (m model) updateModelManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "d":
 		if len(m.modelConfig.Profiles) > 1 && m.modelSelection < len(m.modelConfig.Profiles) {
-			// Remove the selected profile
-			m.modelConfig.Profiles = append(
-				m.modelConfig.Profiles[:m.modelSelection],
-				m.modelConfig.Profiles[m.modelSelection+1:]...,
-			)
-			if m.modelConfig.CurrentProfile >= len(m.modelConfig.Profiles) {
-				m.modelConfig.CurrentProfile = len(m.modelConfig.Profiles) - 1
+			profile := m.modelConfig.Profiles[m.modelSelection]
+			m.confirmDialog = &ConfirmDialog{
+				Action:       ConfirmDeleteModel,
+				Message:      fmt.Sprintf("Are you sure you want to delete model profile '%s'?\n\nModel: %s\nThis action cannot be undone.", profile.Name, profile.Model),
+				PreviousView: ViewModelManager,
 			}
-			if m.modelSelection >= len(m.modelConfig.Profiles) {
-				m.modelSelection = len(m.modelConfig.Profiles) - 1
-			}
-			m.saveModelConfig()
-			return m, showStatus("🗑️ Profile deleted")
+			m.viewMode = ViewConfirmDialog
+		} else {
+			return m, showStatus("❌ Cannot delete last profile")
 		}
-		return m, showStatus("❌ Cannot delete last profile")
+		return m, nil
 	}
 	return m, nil
 }
@@ -172,6 +168,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateModelPull(msg)
 		case ViewSettings:
 			return m.updateSettings(msg)
+		case ViewConfirmDialog:
+			return m.updateConfirmDialog(msg)
 		}
 
 	case spinner.TickMsg:
@@ -421,23 +419,23 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.viewMode = ViewSettings
 			// Initialize settings inputs
 			m.settingsInputs = make([]textinput.Model, 4)
-			
+
 			// Main Prompt
 			m.settingsInputs[0] = textinput.New()
 			m.settingsInputs[0].SetValue(m.appSettings.MainPrompt)
 			m.settingsInputs[0].CharLimit = 500
 			m.settingsInputs[0].Focus()
-			
+
 			// Memory Allotment
 			m.settingsInputs[1] = textinput.New()
 			m.settingsInputs[1].SetValue(m.appSettings.MemoryAllotment)
 			m.settingsInputs[1].CharLimit = 20
-			
+
 			// User Name
 			m.settingsInputs[2] = textinput.New()
 			m.settingsInputs[2].SetValue(m.appSettings.UserName)
 			m.settingsInputs[2].CharLimit = 50
-			
+
 			// Chat Timeout
 			m.settingsInputs[3] = textinput.New()
 			m.settingsInputs[3].SetValue(fmt.Sprintf("%d", m.appSettings.ChatTimeout))
@@ -463,6 +461,8 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.menuTable, cmd = m.menuTable.Update(msg)
 	return m, cmd
 }
+
+// In ui.go, replace the updateChat function with this:
 
 func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -495,13 +495,14 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
+			// Send message
 			userMsg := m.chatInput.Value()
 			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
 			m.chatInput.SetValue("")
 			m.chatState = ChatStateLoading
 			m.updateChatLines()
 			return m, tea.Batch(
-				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings),
+				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1]),
 				m.chatSpinner.Tick,
 			)
 		}
@@ -593,6 +594,19 @@ func (m model) updatePlaceholder(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scanGlobalResources()
 			return m, showStatus("🔄 Global resources refreshed")
 		}
+	case "p":
+		// Pull from global to local
+		if m.viewMode == ViewGlobalResources && len(m.globalRes) > 0 && m.cursor < len(m.globalRes) {
+			res := &m.globalRes[m.cursor]
+			m.confirmDialog = &ConfirmDialog{
+				Action:      ConfirmPull,
+				Message:     fmt.Sprintf("Pull '%s' from global to project templates?\n\nThis will copy the file to your project's templates directory.", res.Name),
+				Resource:    res,
+				PreviousView: ViewGlobalResources,
+			}
+			m.viewMode = ViewConfirmDialog
+		}
+		return m, nil
 	}
 
 	return m, cmd
@@ -691,9 +705,6 @@ func (m model) updateResourceManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.startEditing()
 		}
 		return m, nil
-	case "c":
-		m.createTemplate()
-		return m, showStatus("📝 Template created")
 	case "f":
 		m.editMode = true
 		m.editField = 2
@@ -714,31 +725,56 @@ func (m model) updateResourceManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		res := m.getSelectedResource()
 		if res != nil {
-			os.Remove(res.Path)
-
-			if m.projectMeta != nil {
-				relPath, err := filepath.Rel(m.projectRoot, res.Path)
-				if err != nil {
-					relPath = res.Name
-				}
-				delete(m.projectMeta.Resources, relPath)
-				m.saveProjectMetadata()
+			m.confirmDialog = &ConfirmDialog{
+				Action:      ConfirmDelete,
+				Message:     fmt.Sprintf("Are you sure you want to delete '%s'?\n\nThis action cannot be undone.", res.Name),
+				Resource:    res,
+				PreviousView: ViewResourceManager,
 			}
-
-			m.scanResources()
-			m.updateTableData()
-			return m, showStatus("🗑️ Resource deleted")
+			m.viewMode = ViewConfirmDialog
 		}
 		return m, nil
-	case "t":
-		if m.projectRoot != "" {
-			templatePath := filepath.Join(m.projectRoot, "template.md")
-			m.createDefaultTemplate(templatePath)
-			m.scanResources()
-			m.updateTableData()
-			return m, showStatus("📝 Template regenerated")
+	case "p":
+		// Push to global
+		res := m.getSelectedResource()
+		if res != nil {
+			m.confirmDialog = &ConfirmDialog{
+				Action:      ConfirmPush,
+				Message:     fmt.Sprintf("Push '%s' to global templates directory?\n\nThis will copy the file to ~/.local/share/dwight/templates/", res.Name),
+				Resource:    res,
+				PreviousView: ViewResourceManager,
+			}
+			m.viewMode = ViewConfirmDialog
 		}
-		return m, showStatus("❌ No project root found")
+		return m, nil
+	// Add sorting keys
+	case "s":
+		// Cycle through sort options
+		switch m.sortBy {
+		case "name":
+			m.sortBy = "type"
+		case "type":
+			m.sortBy = "size"
+		case "size":
+			m.sortBy = "modified"
+		case "modified":
+			m.sortBy = "name"
+		default:
+			m.sortBy = "name"
+		}
+		m.applyFilter() // This will re-sort
+		m.updateTableData()
+		return m, showStatus(fmt.Sprintf("🔄 Sorted by %s", m.sortBy))
+	case "S":
+		// Toggle sort direction
+		m.sortDesc = !m.sortDesc
+		m.applyFilter() // This will re-sort
+		m.updateTableData()
+		direction := "ascending"
+		if m.sortDesc {
+			direction = "descending"
+		}
+		return m, showStatus(fmt.Sprintf("🔄 Sort direction: %s", direction))
 	}
 
 	m.table, cmd = m.table.Update(msg)
@@ -797,7 +833,7 @@ func (m *model) startEditing() {
 	m.editMode = true
 	m.editField = 0
 
-	m.inputs = make([]textinput.Model, 3)
+	m.inputs = make([]textinput.Model, 2)
 
 	m.inputs[0] = textinput.New()
 	m.inputs[0].SetValue(m.selectedRes.Description)
@@ -807,14 +843,10 @@ func (m *model) startEditing() {
 	m.inputs[1] = textinput.New()
 	m.inputs[1].SetValue(strings.Join(m.selectedRes.Tags, ", "))
 	m.inputs[1].CharLimit = 100
-
-	m.inputs[2] = textinput.New()
-	m.inputs[2].SetValue(m.selectedRes.Type)
-	m.inputs[2].CharLimit = 50
 }
 
 func (m *model) saveEdit() {
-	if m.selectedRes == nil || len(m.inputs) < 3 {
+	if m.selectedRes == nil || len(m.inputs) < 2 {
 		return
 	}
 
@@ -829,8 +861,6 @@ func (m *model) saveEdit() {
 	} else {
 		m.selectedRes.Tags = []string{}
 	}
-
-	m.selectedRes.Type = m.inputs[2].Value()
 
 	m.saveResourceMetadata(m.selectedRes)
 
@@ -943,6 +973,140 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m model) updateConfirmDialog(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.confirmDialog == nil {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "y", "Y":
+		// Execute the confirmed action
+		switch m.confirmDialog.Action {
+		case ConfirmDelete:
+			return m.executeDelete()
+		case ConfirmPush:
+			return m.executePush()
+		case ConfirmPull:
+			return m.executePull()
+		case ConfirmDeleteModel:
+			return m.executeDeleteModel()
+		}
+	case "n", "N", "esc":
+		// Cancel the action
+		previousView := m.confirmDialog.PreviousView
+		m.confirmDialog = nil
+		m.viewMode = previousView
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m model) executeDelete() (tea.Model, tea.Cmd) {
+	if m.confirmDialog == nil || m.confirmDialog.Resource == nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewResourceManager
+		return m, showStatus("❌ Delete failed: no resource selected")
+	}
+
+	res := m.confirmDialog.Resource
+	if err := os.Remove(res.Path); err != nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewResourceManager
+		return m, showStatus(fmt.Sprintf("❌ Delete failed: %v", err))
+	}
+
+	// Remove from project metadata
+	if m.projectMeta != nil {
+		relPath, err := filepath.Rel(m.projectRoot, res.Path)
+		if err != nil {
+			relPath = res.Name
+		}
+		delete(m.projectMeta.Resources, relPath)
+		m.saveProjectMetadata()
+	}
+
+	// Update view
+	m.confirmDialog = nil
+	m.viewMode = ViewResourceManager
+	m.scanResources()
+	m.updateTableData()
+	return m, showStatus("🗑️ Resource deleted")
+}
+
+func (m model) executePush() (tea.Model, tea.Cmd) {
+	if m.confirmDialog == nil || m.confirmDialog.Resource == nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewResourceManager
+		return m, showStatus("❌ Push failed: no resource selected")
+	}
+
+	res := m.confirmDialog.Resource
+	if err := m.pushResourceToGlobal(res); err != nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewResourceManager
+		return m, showStatus(fmt.Sprintf("❌ Push failed: %v", err))
+	}
+
+	m.confirmDialog = nil
+	m.viewMode = ViewResourceManager
+	return m, showStatus("📤 Resource pushed to global")
+}
+
+func (m model) executePull() (tea.Model, tea.Cmd) {
+	if m.confirmDialog == nil || m.confirmDialog.Resource == nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewGlobalResources
+		return m, showStatus("❌ Pull failed: no resource selected")
+	}
+
+	res := m.confirmDialog.Resource
+	if err := m.pullResourceFromGlobal(res); err != nil {
+		m.confirmDialog = nil
+		m.viewMode = ViewGlobalResources
+		return m, showStatus(fmt.Sprintf("❌ Pull failed: %v", err))
+	}
+
+	// Rescan local resources
+	m.scanResources()
+	m.updateTableData()
+
+	m.confirmDialog = nil
+	m.viewMode = ViewGlobalResources
+	return m, showStatus("📥 Resource pulled to project")
+}
+
+func (m model) executeDeleteModel() (tea.Model, tea.Cmd) {
+	if len(m.modelConfig.Profiles) <= 1 || m.modelSelection >= len(m.modelConfig.Profiles) {
+		m.confirmDialog = nil
+		m.viewMode = ViewModelManager
+		return m, showStatus("❌ Cannot delete last profile")
+	}
+
+	profileName := m.modelConfig.Profiles[m.modelSelection].Name
+
+	// Remove the selected profile
+	m.modelConfig.Profiles = append(
+		m.modelConfig.Profiles[:m.modelSelection],
+		m.modelConfig.Profiles[m.modelSelection+1:]...,
+	)
+
+	// Adjust current profile index if needed
+	if m.modelConfig.CurrentProfile >= len(m.modelConfig.Profiles) {
+		m.modelConfig.CurrentProfile = len(m.modelConfig.Profiles) - 1
+	}
+
+	// Adjust selection index if needed
+	if m.modelSelection >= len(m.modelConfig.Profiles) {
+		m.modelSelection = len(m.modelConfig.Profiles) - 1
+	}
+
+	m.saveModelConfig()
+	m.confirmDialog = nil
+	m.viewMode = ViewModelManager
+	return m, showStatus(fmt.Sprintf("🗑️ Profile '%s' deleted", profileName))
 }
 
 func (m *model) handleFileScroll(key string) {

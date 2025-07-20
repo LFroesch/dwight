@@ -252,29 +252,53 @@ func (m *model) checkOllamaModel() tea.Cmd {
 	}
 }
 
-func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings) tea.Cmd {
+func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
 		timeout := time.Duration(appSettings.ChatTimeout) * time.Second
 		client := &http.Client{Timeout: timeout}
 
-		// Prepend main prompt if it exists
+		// Build conversation context from chat history
+		var messages []map[string]string
+
+		// Add system message if exists
 		systemPrompt := profile.SystemPrompt
 		if appSettings.MainPrompt != "" {
 			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
 		}
+		if systemPrompt != "" {
+			messages = append(messages, map[string]string{
+				"role":    "system",
+				"content": systemPrompt,
+			})
+		}
+
+		// Add chat history (excluding the current message which is already in userMsg)
+		for _, msg := range chatHistory {
+			if msg.Role == "user" || msg.Role == "assistant" {
+				messages = append(messages, map[string]string{
+					"role":    msg.Role,
+					"content": msg.Content,
+				})
+			}
+		}
+
+		// Add current user message
+		messages = append(messages, map[string]string{
+			"role":    "user",
+			"content": userMsg,
+		})
 
 		requestBody := map[string]interface{}{
 			"model":       profile.Model,
-			"prompt":      userMsg,
-			"system":      systemPrompt,
+			"messages":    messages,
 			"temperature": profile.Temperature,
 			"stream":      false,
 		}
 
 		jsonData, _ := json.Marshal(requestBody)
 
-		resp, err := client.Post(ollamaURL+"/api/generate", "application/json", bytes.NewBuffer(jsonData))
+		resp, err := client.Post(ollamaURL+"/api/chat", "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return ResponseMsg{Err: fmt.Errorf("Request failed: %v", err)}
 		}
@@ -290,9 +314,11 @@ func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettin
 		}
 
 		var response struct {
-			Response        string `json:"response"`
-			PromptEvalCount int    `json:"prompt_eval_count"`
-			EvalCount       int    `json:"eval_count"`
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			PromptEvalCount int `json:"prompt_eval_count"`
+			EvalCount       int `json:"eval_count"`
 		}
 
 		if err := json.Unmarshal(body, &response); err != nil {
@@ -300,7 +326,7 @@ func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettin
 		}
 		duration := time.Since(startTime)
 		return ResponseMsg{
-			Content:      response.Response,
+			Content:      response.Message.Content,
 			Duration:     duration,
 			PromptTokens: response.PromptEvalCount,
 			TotalTokens:  response.PromptEvalCount + response.EvalCount,

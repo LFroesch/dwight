@@ -82,10 +82,27 @@ const (
 	ViewModelManager
 	ViewModelCreate
 	ViewModelPull
+	ViewConfirmDialog
 )
 
 type statusMsg struct {
 	message string
+}
+
+type ConfirmAction int
+
+const (
+	ConfirmDelete ConfirmAction = iota
+	ConfirmPush
+	ConfirmPull
+	ConfirmDeleteModel
+)
+
+type ConfirmDialog struct {
+	Action      ConfirmAction
+	Message     string
+	Resource    *AIResource
+	PreviousView ViewMode
 }
 
 type tickMsg time.Time
@@ -137,6 +154,9 @@ type model struct {
 	modelPullError  error
 	appSettings     AppSettings
 	settingsInputs  []textinput.Model
+	sortBy          string
+	sortDesc        bool
+	confirmDialog   *ConfirmDialog
 }
 
 type ChatState int

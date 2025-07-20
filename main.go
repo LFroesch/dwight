@@ -63,6 +63,8 @@ func main() {
 		editField:   -1,
 		showHelp:    false,
 		lastUpdate:  time.Now(),
+		sortBy:      "modified",
+		sortDesc:    true,
 	}
 
 	m.loadProjectMetadata()
@@ -73,6 +75,11 @@ func main() {
 	m.chatInput.Placeholder = "Type your message..."
 	m.chatInput.CharLimit = 500
 	m.chatInput.Width = 100
+
+	m.textInput = textinput.New()
+	m.textInput.Placeholder = "Enter resource name..."
+	m.textInput.CharLimit = 100
+	m.textInput.Width = 50
 
 	m.chatSpinner = spinner.New()
 	m.chatSpinner.Spinner = spinner.Dot
