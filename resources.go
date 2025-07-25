@@ -14,12 +14,12 @@ import (
 func (m *model) scanResources() {
 	m.resources = []AIResource{}
 
-	// ONLY scan local directory - no global templates
+	// ONLY scan current directory recursively - no global templates
 	scanDir := m.currentDir
-	if m.projectRoot != "" {
-		scanDir = m.projectRoot
-	}
 	m.scanDirectory(scanDir)
+
+	// Reconcile metadata with actual filesystem
+	m.reconcileMetadata()
 
 	m.applyFilter()
 }
@@ -205,6 +205,56 @@ func (m *model) saveResourceMetadata(resource *AIResource) {
 		LastModified: time.Now(),
 	}
 
+	m.saveProjectMetadata()
+}
+
+func (m *model) reconcileMetadata() {
+	if m.projectMeta == nil {
+		return
+	}
+
+	// Create a map of currently scanned files for quick lookup
+	scannedFiles := make(map[string]bool)
+	for _, resource := range m.resources {
+		if m.projectRoot != "" {
+			if relPath, err := filepath.Rel(m.projectRoot, resource.Path); err == nil {
+				scannedFiles[relPath] = true
+			}
+		}
+	}
+
+	// Add metadata for new files that don't have it yet
+	for _, resource := range m.resources {
+		var relPath string
+		if m.projectRoot != "" {
+			if rp, err := filepath.Rel(m.projectRoot, resource.Path); err == nil {
+				relPath = rp
+			} else {
+				relPath = resource.Name
+			}
+		} else {
+			relPath = resource.Name
+		}
+
+		if _, exists := m.projectMeta.Resources[relPath]; !exists {
+			// Add new file with default metadata
+			m.projectMeta.Resources[relPath] = ResourceMetadata{
+				Tags:         []string{},
+				Description:  "",
+				Type:         resource.Type,
+				LastModified: time.Now(),
+			}
+		}
+	}
+
+	// Remove orphaned metadata for files that no longer exist
+	for relPath := range m.projectMeta.Resources {
+		if !scannedFiles[relPath] {
+			delete(m.projectMeta.Resources, relPath)
+		}
+	}
+
+	// Save updated metadata
 	m.saveProjectMetadata()
 }
 
