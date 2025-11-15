@@ -694,32 +694,70 @@ CONFIGURATION:
 
 func (m model) viewChat() string {
 	profile := m.getCurrentProfile()
-	header := fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model)
-	modelHint := "Press Tab to change model | ↑↓: scroll | Home/End: top/bottom"
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+
+	header := titleStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model))
+
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
+	modelHint := hintStyle.Render("Tab: switch model | Ctrl+L: clear | Ctrl+S: save | ↑↓: scroll | Esc: menu")
 
 	var content []string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		content = []string{m.chatSpinner.View()}
+		content = []string{
+			"",
+			m.chatSpinner.View() + " Initializing Ollama...",
+			"",
+			"Please wait while we check model availability and start the container if needed.",
+		}
 	case ChatStateError:
-		content = []string{fmt.Sprintf("❌ Error: %v", m.chatErr)}
+		errorContent := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#EF4444")).
+			Bold(true).
+			Render(fmt.Sprintf("❌ Error: %v", m.chatErr))
+		content = []string{errorContent}
 	case ChatStateReady, ChatStateLoading:
 		content = m.getVisibleChatLines()
 	}
 
 	var footer string
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA"))
+
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		footer = "Checking model availability..."
+		footer = footerStyle.Render("⏳ Checking model availability...")
 	case ChatStateError:
-		footer = "❌ Error - Press Esc to return to menu"
+		footer = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#EF4444")).
+			Render("❌ Error - Press Esc to return to menu")
 	case ChatStateReady:
-		footer = "Type your message: " + m.chatInput.View() + "\nEnter: send, Esc: menu"
+		if len(m.chatMessages) > 0 {
+			lastMsg := m.chatMessages[len(m.chatMessages)-1]
+			if lastMsg.Role == "assistant" && lastMsg.TotalTokens > 0 {
+				stats := lipgloss.NewStyle().
+					Foreground(lipgloss.Color("#9CA3AF")).
+					Render(fmt.Sprintf("Last response: %.1fs, %d tokens", lastMsg.Duration.Seconds(), lastMsg.TotalTokens))
+				footer = stats + "\n\n"
+			}
+		}
+		footer += footerStyle.Render("📝 Your message:\n") + m.chatTextArea.View()
 	case ChatStateLoading:
-		footer = "Processing..."
+		footer = footerStyle.Render("⏳ Waiting for response...")
 	}
 
-	result := header + "\n" + modelHint + "\n\n"
+	// Show scroll position if scrolled
+	scrollInfo := ""
+	if len(m.chatLines) > m.chatMaxLines && m.chatScrollPos > 0 {
+		scrollPercent := int(float64(m.chatScrollPos) / float64(len(m.chatLines)-m.chatMaxLines) * 100)
+		scrollInfo = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6B7280")).
+			Render(fmt.Sprintf(" [%d%%]", scrollPercent))
+	}
+
+	result := header + scrollInfo + "\n" + modelHint + "\n\n"
 	result += strings.Join(content, "\n")
 	result += "\n\n" + footer
 

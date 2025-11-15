@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m model) Init() tea.Cmd {
@@ -187,7 +188,45 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateError
 		} else {
 			m.chatState = ChatStateReady
+			m.chatTextArea.Focus()
 		}
+		return m, nil
+
+	case StreamChunkMsg:
+		if msg.Err != nil {
+			m.chatErr = msg.Err
+			m.chatState = ChatStateError
+			m.chatStreaming = false
+			m.chatStreamBuffer.Reset()
+			m.updateChatLines()
+			return m, nil
+		}
+
+		if msg.Done {
+			// Finalize the streaming message with metadata
+			if m.chatStreamBuffer.Len() > 0 {
+				m.chatMessages = append(m.chatMessages, ChatMessage{
+					Role:         "assistant",
+					Content:      m.chatStreamBuffer.String(),
+					Duration:     msg.Duration,
+					PromptTokens: msg.PromptTokens,
+					TotalTokens:  msg.TotalTokens,
+				})
+				m.chatStreamBuffer.Reset()
+			}
+			m.chatState = ChatStateReady
+			m.chatStreaming = false
+			m.chatTextArea.Focus()
+			m.updateChatLines()
+			return m, nil
+		}
+
+		// Append chunk to buffer and update display
+		m.chatStreamBuffer.WriteString(msg.Content)
+		m.updateChatLines()
+
+		// Continue listening for next chunk - this is key!
+		// The waitForStreamChunk function will return the next message from the channel
 		return m, nil
 
 	case ResponseMsg:
@@ -203,10 +242,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				TotalTokens:  msg.TotalTokens,
 			})
 			m.chatState = ChatStateReady
-			// Update text viewer content and auto-scroll to bottom
+			m.chatTextArea.Focus()
 			m.updateChatLines()
 		}
 		return m, nil
+
+	case ClearChatMsg:
+		m.chatMessages = []ChatMessage{}
+		m.chatStreamBuffer.Reset()
+		m.chatStreaming = false
+		m.updateChatLines()
+		return m, showStatus("💬 Chat cleared")
 
 	case ModelPullMsg:
 		if msg.Err != nil {
@@ -405,8 +451,10 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Replace the existing case 1 with this:
 			m.viewMode = ViewChat
 			m.chatState = ChatStateCheckingModel
-			m.chatInput.Focus()
+			m.chatTextArea.Focus()
 			m.chatMessages = []ChatMessage{} // Clear previous messages
+			m.chatStreamBuffer.Reset()
+			m.chatStreaming = false
 			m.updateChatLines()              // Initialize text viewer with empty content
 			return m, tea.Batch(
 				m.checkOllamaModel(),
@@ -475,44 +523,70 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.viewMode = ViewMenu
-		m.chatInput.Blur()
+		m.chatTextArea.Blur()
 		m.chatMessages = []ChatMessage{}
 		m.chatState = ChatStateInit
+		m.chatStreamBuffer.Reset()
+		m.chatStreaming = false
 		// Stop Ollama container to free memory when exiting chat
 		go stopOllamaContainer()
 		return m, nil
-	case "tab":
+
+	case "ctrl+l":
+		// Clear chat without exiting
 		if m.chatState == ChatStateReady {
+			return m, func() tea.Msg { return ClearChatMsg{} }
+		}
+
+	case "ctrl+s":
+		// Save chat log manually
+		if len(m.chatMessages) > 0 {
+			if err := m.saveChatLog(); err == nil {
+				return m, showStatus("💾 Chat saved")
+			} else {
+				return m, showStatus("❌ Failed to save chat")
+			}
+		}
+
+	case "tab":
+		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
-			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
+			return m, showStatus(fmt.Sprintf("🔄 Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}
+
 	case "shift+tab":
-		if m.chatState == ChatStateReady {
+		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
-			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
+			return m, showStatus(fmt.Sprintf("🔄 Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}
+
 	case "enter":
-		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
-			// Send message
-			userMsg := m.chatInput.Value()
-			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
-			m.chatInput.SetValue("")
-			m.chatState = ChatStateLoading
-			m.updateChatLines()
-			return m, tea.Batch(
-				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1]),
-				m.chatSpinner.Tick,
-			)
+		if m.chatState == ChatStateReady && !m.chatStreaming {
+			userMsg := strings.TrimSpace(m.chatTextArea.Value())
+			if userMsg != "" {
+				// Send message
+				m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
+				m.chatTextArea.Reset()
+				m.chatState = ChatStateLoading
+				m.updateChatLines()
+				return m, tea.Batch(
+					sendChatMessageStreaming(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1]),
+					m.chatSpinner.Tick,
+				)
+			}
 		}
-	default:
+
+	case "up", "down", "pgup", "pgdown", "home", "end":
 		// Handle scrolling with the new clean function
 		m.handleChatScroll(msg.String())
+		return m, nil
 	}
 
-	if m.chatState == ChatStateReady {
-		m.chatInput, cmd = m.chatInput.Update(msg)
+	// Update textarea when in ready state and not streaming
+	if m.chatState == ChatStateReady && !m.chatStreaming {
+		m.chatTextArea, cmd = m.chatTextArea.Update(msg)
 	}
 
 	return m, cmd
@@ -1191,30 +1265,58 @@ func (m *model) updateChatLines() {
 
 	m.chatLines = []string{}
 
-	if len(m.chatMessages) == 0 {
+	if len(m.chatMessages) == 0 && !m.chatStreaming {
 		m.chatLines = append(m.chatLines, "💬 Start a conversation with the AI assistant...")
 		m.chatLines = append(m.chatLines, "")
+		m.chatLines = append(m.chatLines, "Commands:")
+		m.chatLines = append(m.chatLines, "  • Enter: Send message")
+		m.chatLines = append(m.chatLines, "  • Ctrl+L: Clear chat")
+		m.chatLines = append(m.chatLines, "  • Ctrl+S: Save chat")
+		m.chatLines = append(m.chatLines, "  • Tab: Switch model")
+		m.chatLines = append(m.chatLines, "  • Esc: Exit to menu")
 		m.chatScrollPos = 0
 		return
 	}
 
 	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
-			userLabel := "👤 " + m.appSettings.UserName + ":"
+			userLabel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render("👤 " + m.appSettings.UserName + ":")
 			m.chatLines = append(m.chatLines, userLabel)
 			wrapped := wrapText(msg.Content, contentWidth)
-			m.chatLines = append(m.chatLines, wrapped...)
+			for _, line := range wrapped {
+				m.chatLines = append(m.chatLines, "  "+line)
+			}
 			m.chatLines = append(m.chatLines, "")
 		} else {
 			header := "🤖 Assistant:"
 			if msg.Duration > 0 {
 				header = fmt.Sprintf("🤖 Assistant: (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens)
 			}
-			m.chatLines = append(m.chatLines, header)
-			wrapped := wrapText(msg.Content, contentWidth)
-			m.chatLines = append(m.chatLines, wrapped...)
+			headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
+			m.chatLines = append(m.chatLines, headerStyled)
+
+			// Apply markdown formatting
+			formatted := formatMessageContent(msg.Content)
+			wrapped := wrapText(formatted, contentWidth)
+			for _, line := range wrapped {
+				m.chatLines = append(m.chatLines, "  "+line)
+			}
 			m.chatLines = append(m.chatLines, "")
 		}
+	}
+
+	// Show streaming content
+	if m.chatStreaming && m.chatStreamBuffer.Len() > 0 {
+		header := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render("🤖 Assistant:")
+		m.chatLines = append(m.chatLines, header)
+
+		// Format streaming content with markdown
+		formatted := formatMessageContent(m.chatStreamBuffer.String())
+		wrapped := wrapText(formatted, contentWidth)
+		for _, line := range wrapped {
+			m.chatLines = append(m.chatLines, "  "+line)
+		}
+		m.chatLines = append(m.chatLines, "")
 	}
 
 	if m.chatState == ChatStateLoading {

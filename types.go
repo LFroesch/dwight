@@ -1,10 +1,12 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -134,14 +136,17 @@ type model struct {
 	lastUpdate      time.Time
 	cursor          int
 	fromGlobal      bool
-	chatState       ChatState
-	chatMessages    []ChatMessage
-	chatInput       textinput.Model
-	chatSpinner     spinner.Model
-	chatErr         error
-	chatLines       []string
-	chatScrollPos   int
-	chatMaxLines    int
+	chatState        ChatState
+	chatMessages     []ChatMessage
+	chatInput        textinput.Model
+	chatTextArea     textarea.Model
+	chatSpinner      spinner.Model
+	chatErr          error
+	chatLines        []string
+	chatScrollPos    int
+	chatMaxLines     int
+	chatStreaming    bool
+	chatStreamBuffer strings.Builder
 	fileLines       []string
 	fileScrollPos   int
 	fileMaxLines    int
@@ -166,6 +171,7 @@ const (
 	ChatStateCheckingModel
 	ChatStateReady
 	ChatStateLoading
+	ChatStateStreaming
 	ChatStateError
 )
 
@@ -188,6 +194,21 @@ type ResponseMsg struct {
 	Err          error
 	PromptTokens int
 	TotalTokens  int
+}
+
+type StreamChunkMsg struct {
+	Content      string
+	Done         bool
+	Err          error
+	Duration     time.Duration
+	PromptTokens int
+	TotalTokens  int
+}
+
+type ClearChatMsg struct{}
+
+type CopyToClipboardMsg struct {
+	Content string
 }
 
 func showStatus(msg string) tea.Cmd {
