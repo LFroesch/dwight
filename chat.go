@@ -1,8 +1,7 @@
-// Replace the chat.go file with this enhanced version:
-
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -59,11 +58,15 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#EF4444")).
 			Bold(true)
+
+	codeBlockStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A78BFA")).
+			Background(lipgloss.Color("#1F2937")).
+			Padding(0, 1)
 )
 
 // Docker management functions
 func stopOllamaContainer() error {
-	// Stop the Ollama container to free memory
 	cmd := exec.Command("docker", "stop", "ollama")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to stop Ollama container: %v", err)
@@ -72,7 +75,6 @@ func stopOllamaContainer() error {
 }
 
 func ensureDockerImageExists() error {
-	// Check if Ollama image exists
 	cmd := exec.Command("docker", "images", "ollama/ollama", "--format", "{{.Repository}}")
 	output, err := cmd.Output()
 	if err != nil {
@@ -80,7 +82,6 @@ func ensureDockerImageExists() error {
 	}
 
 	if !strings.Contains(string(output), "ollama/ollama") {
-		// Pull the Ollama image
 		cmd = exec.Command("docker", "pull", "ollama/ollama")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to pull Ollama image: %v", err)
@@ -90,12 +91,10 @@ func ensureDockerImageExists() error {
 }
 
 func ensureOllamaContainer() error {
-	// First ensure the Docker image exists
 	if err := ensureDockerImageExists(); err != nil {
 		return err
 	}
 
-	// Check if Ollama container is running
 	cmd := exec.Command("docker", "ps", "--filter", "name=ollama", "--format", "{{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
@@ -103,10 +102,9 @@ func ensureOllamaContainer() error {
 	}
 
 	if strings.Contains(string(output), "ollama") {
-		return nil // Container is already running
+		return nil
 	}
 
-	// Check if container exists but is stopped
 	cmd = exec.Command("docker", "ps", "-a", "--filter", "name=ollama", "--format", "{{.Names}}")
 	output, err = cmd.Output()
 	if err != nil {
@@ -114,17 +112,14 @@ func ensureOllamaContainer() error {
 	}
 
 	if strings.Contains(string(output), "ollama") {
-		// Container exists but is stopped, start it
 		cmd = exec.Command("docker", "start", "ollama")
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to start Ollama container: %v", err)
 		}
-		// Wait a bit for container to start
 		time.Sleep(3 * time.Second)
 		return nil
 	}
 
-	// Container doesn't exist, create and run it
 	cmd = exec.Command("docker", "run", "-d",
 		"--name", "ollama",
 		"-p", "11434:11434",
@@ -134,13 +129,11 @@ func ensureOllamaContainer() error {
 		return fmt.Errorf("failed to run Ollama container: %v", err)
 	}
 
-	// Wait for container to start
 	time.Sleep(5 * time.Second)
 	return nil
 }
 
 func pullModelIfNeeded(modelName string) error {
-	// Check if model exists by trying to list it
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Get(ollamaURL + "/api/tags")
 	if err != nil {
@@ -162,18 +155,15 @@ func pullModelIfNeeded(modelName string) error {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	// Check if model already exists
 	for _, model := range tags.Models {
 		if strings.HasPrefix(model.Name, modelName) {
-			return nil // Model already exists
+			return nil
 		}
 	}
 
-	// Model doesn't exist, start pulling it
 	pullReq := map[string]string{"name": modelName}
 	jsonData, _ := json.Marshal(pullReq)
 
-	// Start the pull process (don't wait for completion)
 	pullClient := &http.Client{Timeout: 60 * time.Second}
 	pullResp, err := pullClient.Post(ollamaURL+"/api/pull", "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -185,16 +175,13 @@ func pullModelIfNeeded(modelName string) error {
 		return fmt.Errorf("model pull request failed: %d", pullResp.StatusCode)
 	}
 
-	// Consume the response to avoid connection issues
 	io.ReadAll(pullResp.Body)
 
-	// Now wait for the model to be available by polling
 	maxWaitTime := 10 * time.Minute
 	checkInterval := 10 * time.Second
 	startTime := time.Now()
 
 	for time.Since(startTime) < maxWaitTime {
-		// Check if model is now available
 		resp2, err := client.Get(ollamaURL + "/api/tags")
 		if err != nil {
 			time.Sleep(checkInterval)
@@ -219,17 +206,14 @@ func pullModelIfNeeded(modelName string) error {
 			continue
 		}
 
-		// Check if model is now available
 		for _, model := range tags2.Models {
 			if strings.HasPrefix(model.Name, modelName) {
 				resp2.Body.Close()
-				return nil // Model is ready!
+				return nil
 			}
 		}
 
 		resp2.Body.Close()
-
-		// Wait before checking again
 		time.Sleep(checkInterval)
 	}
 
@@ -238,12 +222,10 @@ func pullModelIfNeeded(modelName string) error {
 
 func (m *model) checkOllamaModel() tea.Cmd {
 	return func() tea.Msg {
-		// First ensure Ollama container is running
 		if err := ensureOllamaContainer(); err != nil {
 			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to start Ollama container: %v", err)}
 		}
 
-		// Then check if the model is available and pull if needed
 		if err := pullModelIfNeeded(m.getCurrentProfile().Model); err != nil {
 			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to ensure model availability: %v", err)}
 		}
@@ -252,16 +234,13 @@ func (m *model) checkOllamaModel() tea.Cmd {
 	}
 }
 
-func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
+// Streaming chat function
+func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
 	return func() tea.Msg {
-		startTime := time.Now()
-		timeout := time.Duration(appSettings.ChatTimeout) * time.Second
-		client := &http.Client{Timeout: timeout}
+		client := &http.Client{Timeout: time.Duration(appSettings.ChatTimeout) * time.Second}
 
-		// Build conversation context from chat history
 		var messages []map[string]string
 
-		// Add system message if exists
 		systemPrompt := profile.SystemPrompt
 		if appSettings.MainPrompt != "" {
 			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
@@ -273,7 +252,6 @@ func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettin
 			})
 		}
 
-		// Add chat history (excluding the current message which is already in userMsg)
 		for _, msg := range chatHistory {
 			if msg.Role == "user" || msg.Role == "assistant" {
 				messages = append(messages, map[string]string{
@@ -283,7 +261,111 @@ func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettin
 			}
 		}
 
-		// Add current user message
+		messages = append(messages, map[string]string{
+			"role":    "user",
+			"content": userMsg,
+		})
+
+		requestBody := map[string]interface{}{
+			"model":       profile.Model,
+			"messages":    messages,
+			"temperature": profile.Temperature,
+			"stream":      true,
+		}
+
+		jsonData, _ := json.Marshal(requestBody)
+
+		resp, err := client.Post(ollamaURL+"/api/chat", "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			return StreamChunkMsg{Err: fmt.Errorf("Request failed: %v", err), Done: true}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return StreamChunkMsg{Err: fmt.Errorf("API error: %d", resp.StatusCode), Done: true}
+		}
+
+		// Return a command that will read the stream
+		return readStreamCmd(resp.Body)
+	}
+}
+
+func readStreamCmd(body io.ReadCloser) tea.Cmd {
+	return func() tea.Msg {
+		scanner := bufio.NewScanner(body)
+
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+
+			var streamResp struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+				Done            bool `json:"done"`
+				PromptEvalCount int  `json:"prompt_eval_count"`
+				EvalCount       int  `json:"eval_count"`
+			}
+
+			if err := json.Unmarshal(line, &streamResp); err != nil {
+				continue
+			}
+
+			if streamResp.Message.Content != "" {
+				// Send chunk update
+				return StreamChunkMsg{Content: streamResp.Message.Content, Done: false}
+			}
+
+			if streamResp.Done {
+				// Signal completion
+				return StreamChunkMsg{Content: "", Done: true}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			return StreamChunkMsg{Err: err, Done: true}
+		}
+
+		return StreamChunkMsg{Done: true}
+	}
+}
+
+// Continue reading stream chunks
+func continueStreamCmd(body io.ReadCloser) tea.Cmd {
+	return readStreamCmd(body)
+}
+
+// Non-streaming fallback
+func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
+	return func() tea.Msg {
+		startTime := time.Now()
+		timeout := time.Duration(appSettings.ChatTimeout) * time.Second
+		client := &http.Client{Timeout: timeout}
+
+		var messages []map[string]string
+
+		systemPrompt := profile.SystemPrompt
+		if appSettings.MainPrompt != "" {
+			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
+		}
+		if systemPrompt != "" {
+			messages = append(messages, map[string]string{
+				"role":    "system",
+				"content": systemPrompt,
+			})
+		}
+
+		for _, msg := range chatHistory {
+			if msg.Role == "user" || msg.Role == "assistant" {
+				messages = append(messages, map[string]string{
+					"role":    msg.Role,
+					"content": msg.Content,
+				})
+			}
+		}
+
 		messages = append(messages, map[string]string{
 			"role":    "user",
 			"content": userMsg,
@@ -358,13 +440,11 @@ func wrapText(text string, width int) []string {
 
 		currentLine := ""
 		for _, word := range words {
-			// If word is too long, break it
 			if len(word) > width {
 				if currentLine != "" {
 					lines = append(lines, currentLine)
 					currentLine = ""
 				}
-				// Break the long word into chunks
 				for len(word) > width {
 					lines = append(lines, word[:width])
 					word = word[width:]
@@ -375,7 +455,6 @@ func wrapText(text string, width int) []string {
 				continue
 			}
 
-			// Check if adding this word would exceed width
 			testLine := currentLine
 			if testLine != "" {
 				testLine += " "
@@ -405,13 +484,11 @@ func (m *model) saveChatLog() error {
 		return nil
 	}
 
-	// Create chats directory in current directory
 	chatsDir := filepath.Join(m.currentDir, "chats")
 	if err := os.MkdirAll(chatsDir, 0755); err != nil {
 		return err
 	}
 
-	// Format filename: 10_25_25_3_30_PM_model_name.txt
 	now := time.Now()
 	filename := fmt.Sprintf("%02d_%02d_%02d_%d_%02d_%s_%s.txt",
 		now.Month(), now.Day(), now.Year()%100,
@@ -450,7 +527,7 @@ func (m *model) saveChatLog() error {
 func cleanupOldChats(dir string, daysOld int) (int, error) {
 	chatsDir := filepath.Join(dir, "chats")
 	if _, err := os.Stat(chatsDir); os.IsNotExist(err) {
-		return 0, nil // No chats directory
+		return 0, nil
 	}
 
 	cutoffTime := time.Now().AddDate(0, 0, -daysOld)
@@ -480,4 +557,44 @@ func cleanupOldChats(dir string, daysOld int) (int, error) {
 	}
 
 	return deletedCount, nil
+}
+
+// Simple markdown-like formatting for code blocks
+func formatMessageContent(content string) string {
+	lines := strings.Split(content, "\n")
+	var formatted []string
+	inCodeBlock := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+
+		if inCodeBlock {
+			formatted = append(formatted, codeBlockStyle.Render("  "+line))
+		} else if strings.HasPrefix(line, "# ") {
+			formatted = append(formatted, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#A78BFA")).Render(line))
+		} else if strings.HasPrefix(line, "## ") {
+			formatted = append(formatted, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8B5CF6")).Render(line))
+		} else if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+			formatted = append(formatted, lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA")).Render("  • "+line[2:]))
+		} else if strings.Contains(line, "`") && !inCodeBlock {
+			// Inline code
+			parts := strings.Split(line, "`")
+			var styledParts []string
+			for i, part := range parts {
+				if i%2 == 1 {
+					styledParts = append(styledParts, lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Render(part))
+				} else {
+					styledParts = append(styledParts, part)
+				}
+			}
+			formatted = append(formatted, strings.Join(styledParts, ""))
+		} else {
+			formatted = append(formatted, line)
+		}
+	}
+
+	return strings.Join(formatted, "\n")
 }

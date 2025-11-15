@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -75,6 +76,15 @@ func main() {
 	m.chatInput.Placeholder = "Type your message..."
 	m.chatInput.CharLimit = 500
 	m.chatInput.Width = 100
+
+	// Initialize textarea for multi-line chat input
+	m.chatTextArea = textarea.New()
+	m.chatTextArea.Placeholder = "Type your message... (Ctrl+J for newline, Enter to send)"
+	m.chatTextArea.CharLimit = 4000
+	m.chatTextArea.SetWidth(100)
+	m.chatTextArea.SetHeight(3)
+	m.chatTextArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	m.chatTextArea.ShowLineNumbers = false
 
 	m.textInput = textinput.New()
 	m.textInput.Placeholder = "Enter resource name..."
