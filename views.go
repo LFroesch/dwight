@@ -719,7 +719,7 @@ func (m model) viewChat() string {
 			Bold(true).
 			Render(fmt.Sprintf("❌ Error: %v", m.chatErr))
 		content = []string{errorContent}
-	case ChatStateReady, ChatStateLoading, ChatStateStreaming:
+	case ChatStateReady, ChatStateLoading:
 		content = m.getVisibleChatLines()
 	}
 
@@ -746,8 +746,6 @@ func (m model) viewChat() string {
 		footer += footerStyle.Render("📝 Your message:\n") + m.chatTextArea.View()
 	case ChatStateLoading:
 		footer = footerStyle.Render("⏳ Waiting for response...")
-	case ChatStateStreaming:
-		footer = footerStyle.Render("⚡ Streaming response...")
 	}
 
 	// Show scroll position if scrolled

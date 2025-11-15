@@ -174,7 +174,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case spinner.TickMsg:
-		if m.chatState == ChatStateLoading || m.chatState == ChatStateStreaming || m.chatState == ChatStateCheckingModel {
+		if m.chatState == ChatStateLoading || m.chatState == ChatStateCheckingModel {
 			var cmd tea.Cmd
 			m.chatSpinner, cmd = m.chatSpinner.Update(msg)
 			m.updateChatLines()
@@ -566,12 +566,10 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			userMsg := strings.TrimSpace(m.chatTextArea.Value())
 			if userMsg != "" {
-				// Send message with streaming
+				// Send message
 				m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
 				m.chatTextArea.Reset()
-				m.chatState = ChatStateStreaming
-				m.chatStreaming = true
-				m.chatStreamBuffer.Reset()
+				m.chatState = ChatStateLoading
 				m.updateChatLines()
 				return m, tea.Batch(
 					sendChatMessageStreaming(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1]),
@@ -1321,7 +1319,7 @@ func (m *model) updateChatLines() {
 		m.chatLines = append(m.chatLines, "")
 	}
 
-	if m.chatState == ChatStateLoading || m.chatState == ChatStateStreaming {
+	if m.chatState == ChatStateLoading {
 		m.chatLines = append(m.chatLines, fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
 	}
 
