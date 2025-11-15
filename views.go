@@ -738,7 +738,7 @@ func (m model) viewChat() string {
 			Foreground(lipgloss.Color("#EF4444")).
 			Render("❌ Error - Press Esc to return to menu")
 	case ChatStateReady:
-		footer = "Type your message:\n" + m.chatInput.View() + "\nEnter: send, Esc: menu"
+		footer = "Type your message (Enter to send):\n" + m.chatTextArea.View() + "\n\nEsc: menu | Tab: switch model | Ctrl+S: save chat"
 	case ChatStateLoading:
 		footer = footerStyle.Render("⏳ Waiting for response...")
 	}

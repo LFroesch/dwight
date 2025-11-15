@@ -72,19 +72,15 @@ func main() {
 	m.loadModelConfig()
 	m.loadSettings()
 
-	m.chatInput = textinput.New()
-	m.chatInput.Placeholder = "Type your message..."
-	m.chatInput.CharLimit = 500
-	m.chatInput.Width = 100
-
 	// Initialize textarea for multi-line chat input
 	m.chatTextArea = textarea.New()
-	m.chatTextArea.Placeholder = "Type your message... (Ctrl+J for newline, Enter to send)"
-	m.chatTextArea.CharLimit = 4000
-	m.chatTextArea.SetWidth(100)
-	m.chatTextArea.SetHeight(3)
+	m.chatTextArea.Placeholder = "Type your message here... (Enter to send)"
+	m.chatTextArea.CharLimit = 8000
+	m.chatTextArea.SetWidth(120)
+	m.chatTextArea.SetHeight(4)
 	m.chatTextArea.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	m.chatTextArea.ShowLineNumbers = false
+	m.chatTextArea.KeyMap.InsertNewline.SetEnabled(false) // Disable Ctrl+J for newline since we want Enter to send
 
 	m.textInput = textinput.New()
 	m.textInput.Placeholder = "Enter resource name..."

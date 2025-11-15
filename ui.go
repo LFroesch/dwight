@@ -580,21 +580,21 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.chatState == ChatStateModelNotAvailable {
 			// User declined to pull the model, go back to menu
 			m.viewMode = ViewMenu
-			m.chatInput.Blur()
+			m.chatTextArea.Blur()
 			m.chatMessages = []ChatMessage{}
 			m.chatState = ChatStateInit
 			return m, nil
 		}
 	case "enter":
-		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
+		if m.chatState == ChatStateReady && strings.TrimSpace(m.chatTextArea.Value()) != "" {
 			// Send message
-			userMsg := m.chatInput.Value()
+			userMsg := strings.TrimSpace(m.chatTextArea.Value())
 			m.chatMessages = append(m.chatMessages, ChatMessage{
 				Role:      "user",
 				Content:   userMsg,
 				Timestamp: time.Now(),
 			})
-			m.chatInput.SetValue("")
+			m.chatTextArea.Reset()
 			m.chatState = ChatStateLoading
 			m.updateChatLines()
 			return m, tea.Batch(
@@ -1048,6 +1048,19 @@ func (m *model) adjustLayout() {
 	if m.fileMaxLines < 5 {
 		m.fileMaxLines = 5
 	}
+
+	// Update chatTextArea dimensions dynamically
+	textAreaWidth := m.width - 10
+	if textAreaWidth < 40 {
+		textAreaWidth = 40
+	}
+	m.chatTextArea.SetWidth(textAreaWidth)
+
+	textAreaHeight := min(5, m.height/6) // Use at most 1/6 of screen height, max 5 lines
+	if textAreaHeight < 2 {
+		textAreaHeight = 2
+	}
+	m.chatTextArea.SetHeight(textAreaHeight)
 }
 
 func formatSize(size int64) string {
@@ -1303,14 +1316,21 @@ func (m *model) updateChatLines() {
 		return
 	}
 
-	for _, msg := range m.chatMessages {
+	for i, msg := range m.chatMessages {
+		// Add separator between messages (except before first message)
+		if i > 0 {
+			separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#374151")).Render(strings.Repeat("─", min(contentWidth, 80)))
+			m.chatLines = append(m.chatLines, separator)
+		}
+
 		if msg.Role == "user" {
 			timeStr := ""
 			if !msg.Timestamp.IsZero() {
 				timeStr = msg.Timestamp.Format("3:04PM") + " - "
 			}
 			userLabel := timeStr + "👤 " + m.appSettings.UserName + ":"
-			m.chatLines = append(m.chatLines, userLabel)
+			userLabelStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render(userLabel)
+			m.chatLines = append(m.chatLines, userLabelStyled)
 			wrapped := wrapText(msg.Content, contentWidth)
 			for _, line := range wrapped {
 				m.chatLines = append(m.chatLines, "  "+line)

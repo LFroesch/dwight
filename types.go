@@ -138,7 +138,6 @@ type model struct {
 	fromGlobal      bool
 	chatState        ChatState
 	chatMessages     []ChatMessage
-	chatInput        textinput.Model
 	chatTextArea     textarea.Model
 	chatSpinner      spinner.Model
 	chatErr          error
