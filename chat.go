@@ -234,9 +234,10 @@ func (m *model) checkOllamaModel() tea.Cmd {
 	}
 }
 
-// Streaming chat function
+// Streaming chat function - collects response with streaming API
 func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
 	return func() tea.Msg {
+		startTime := time.Now()
 		client := &http.Client{Timeout: time.Duration(appSettings.ChatTimeout) * time.Second}
 
 		var messages []map[string]string
@@ -277,22 +278,18 @@ func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings 
 
 		resp, err := client.Post(ollamaURL+"/api/chat", "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			return StreamChunkMsg{Err: fmt.Errorf("Request failed: %v", err), Done: true}
+			return ResponseMsg{Err: fmt.Errorf("Request failed: %v", err)}
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return StreamChunkMsg{Err: fmt.Errorf("API error: %d", resp.StatusCode), Done: true}
+			return ResponseMsg{Err: fmt.Errorf("API error: %d", resp.StatusCode)}
 		}
 
-		// Return a command that will read the stream
-		return readStreamCmd(resp.Body)
-	}
-}
-
-func readStreamCmd(body io.ReadCloser) tea.Cmd {
-	return func() tea.Msg {
-		scanner := bufio.NewScanner(body)
+		// Read the streaming response
+		scanner := bufio.NewScanner(resp.Body)
+		var fullContent strings.Builder
+		var promptTokens, totalTokens int
 
 		for scanner.Scan() {
 			line := scanner.Bytes()
@@ -314,27 +311,29 @@ func readStreamCmd(body io.ReadCloser) tea.Cmd {
 			}
 
 			if streamResp.Message.Content != "" {
-				// Send chunk update
-				return StreamChunkMsg{Content: streamResp.Message.Content, Done: false}
+				fullContent.WriteString(streamResp.Message.Content)
 			}
 
 			if streamResp.Done {
-				// Signal completion
-				return StreamChunkMsg{Content: "", Done: true}
+				promptTokens = streamResp.PromptEvalCount
+				totalTokens = streamResp.PromptEvalCount + streamResp.EvalCount
+				break
 			}
 		}
 
 		if err := scanner.Err(); err != nil {
-			return StreamChunkMsg{Err: err, Done: true}
+			return ResponseMsg{Err: fmt.Errorf("Stream error: %v", err)}
 		}
 
-		return StreamChunkMsg{Done: true}
+		duration := time.Since(startTime)
+		return ResponseMsg{
+			Content:      fullContent.String(),
+			Duration:     duration,
+			PromptTokens: promptTokens,
+			TotalTokens:  totalTokens,
+			Err:          nil,
+		}
 	}
-}
-
-// Continue reading stream chunks
-func continueStreamCmd(body io.ReadCloser) tea.Cmd {
-	return readStreamCmd(body)
 }
 
 // Non-streaming fallback

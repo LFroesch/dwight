@@ -203,11 +203,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.Done {
-			// Finalize the streaming message
+			// Finalize the streaming message with metadata
 			if m.chatStreamBuffer.Len() > 0 {
 				m.chatMessages = append(m.chatMessages, ChatMessage{
-					Role:    "assistant",
-					Content: m.chatStreamBuffer.String(),
+					Role:         "assistant",
+					Content:      m.chatStreamBuffer.String(),
+					Duration:     msg.Duration,
+					PromptTokens: msg.PromptTokens,
+					TotalTokens:  msg.TotalTokens,
 				})
 				m.chatStreamBuffer.Reset()
 			}
@@ -218,15 +221,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Append chunk to buffer
+		// Append chunk to buffer and update display
 		m.chatStreamBuffer.WriteString(msg.Content)
 		m.updateChatLines()
 
-		// Continue reading stream
-		return m, func() tea.Msg {
-			// Simulate receiving next chunk - in real implementation this would come from the stream reader
-			return nil
-		}
+		// Continue listening for next chunk - this is key!
+		// The waitForStreamChunk function will return the next message from the channel
+		return m, nil
 
 	case ResponseMsg:
 		if msg.Err != nil {

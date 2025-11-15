@@ -197,9 +197,12 @@ type ResponseMsg struct {
 }
 
 type StreamChunkMsg struct {
-	Content string
-	Done    bool
-	Err     error
+	Content      string
+	Done         bool
+	Err          error
+	Duration     time.Duration
+	PromptTokens int
+	TotalTokens  int
 }
 
 type ClearChatMsg struct{}
