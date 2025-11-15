@@ -723,7 +723,7 @@ func (m model) viewChat() string {
 	case ChatStateError:
 		footer = "❌ Error - Press Esc to return to menu"
 	case ChatStateReady:
-		footer = "Type your message: " + m.chatInput.View() + "\nEnter: send, Esc: menu"
+		footer = "Type your message:\n" + m.chatInput.View() + "\nEnter: send, Esc: menu"
 	case ChatStateLoading:
 		footer = "Processing..."
 	}
