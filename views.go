@@ -707,11 +707,13 @@ func (m model) viewChat() string {
 	var content []string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
+		content = []string{m.chatSpinner.View()}
+	case ChatStateModelNotAvailable:
 		content = []string{
+			fmt.Sprintf("⚠️  Model '%s' is not available on this system.", m.modelPullName),
 			"",
-			m.chatSpinner.View() + " Initializing Ollama...",
-			"",
-			"Please wait while we check model availability and start the container if needed.",
+			"Would you like to pull it now?",
+			"This may take a few minutes depending on the model size.",
 		}
 	case ChatStateError:
 		errorContent := lipgloss.NewStyle().
@@ -728,22 +730,15 @@ func (m model) viewChat() string {
 
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		footer = footerStyle.Render("⏳ Checking model availability...")
+		footer = "Checking model availability..."
+	case ChatStateModelNotAvailable:
+		footer = "Press Y to pull the model, N to cancel"
 	case ChatStateError:
 		footer = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#EF4444")).
 			Render("❌ Error - Press Esc to return to menu")
 	case ChatStateReady:
-		if len(m.chatMessages) > 0 {
-			lastMsg := m.chatMessages[len(m.chatMessages)-1]
-			if lastMsg.Role == "assistant" && lastMsg.TotalTokens > 0 {
-				stats := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#9CA3AF")).
-					Render(fmt.Sprintf("Last response: %.1fs, %d tokens", lastMsg.Duration.Seconds(), lastMsg.TotalTokens))
-				footer = stats + "\n\n"
-			}
-		}
-		footer += footerStyle.Render("📝 Your message:\n") + m.chatTextArea.View()
+		footer = "Type your message:\n" + m.chatInput.View() + "\nEnter: send, Esc: menu"
 	case ChatStateLoading:
 		footer = footerStyle.Render("⏳ Waiting for response...")
 	}
