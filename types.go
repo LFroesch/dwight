@@ -164,6 +164,7 @@ type ChatState int
 const (
 	ChatStateInit ChatState = iota
 	ChatStateCheckingModel
+	ChatStateModelNotAvailable
 	ChatStateReady
 	ChatStateLoading
 	ChatStateError
@@ -172,6 +173,7 @@ const (
 type ChatMessage struct {
 	Role         string
 	Content      string
+	Timestamp    time.Time
 	Duration     time.Duration
 	PromptTokens int
 	TotalTokens  int
@@ -179,6 +181,7 @@ type ChatMessage struct {
 
 type CheckModelMsg struct {
 	Available bool
+	ModelName string
 	Err       error
 }
 

@@ -236,19 +236,65 @@ func pullModelIfNeeded(modelName string) error {
 	return fmt.Errorf("model pull timed out after %v", maxWaitTime)
 }
 
+// checkModelAvailable checks if a model exists without pulling it
+func checkModelAvailable(modelName string) (bool, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(ollamaURL + "/api/tags")
+	if err != nil {
+		return false, fmt.Errorf("failed to connect to Ollama: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("Ollama API error: %d", resp.StatusCode)
+	}
+
+	var tags struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return false, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	// Check if model exists
+	for _, model := range tags.Models {
+		if strings.HasPrefix(model.Name, modelName) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (m *model) checkOllamaModel() tea.Cmd {
 	return func() tea.Msg {
+		modelName := m.getCurrentProfile().Model
+
 		// First ensure Ollama container is running
 		if err := ensureOllamaContainer(); err != nil {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to start Ollama container: %v", err)}
+			return CheckModelMsg{Available: false, ModelName: modelName, Err: fmt.Errorf("Failed to start Ollama container: %v", err)}
 		}
 
-		// Then check if the model is available and pull if needed
-		if err := pullModelIfNeeded(m.getCurrentProfile().Model); err != nil {
-			return CheckModelMsg{Available: false, Err: fmt.Errorf("Failed to ensure model availability: %v", err)}
+		// Check if the model is available (without pulling)
+		available, err := checkModelAvailable(modelName)
+		if err != nil {
+			return CheckModelMsg{Available: false, ModelName: modelName, Err: fmt.Errorf("Failed to check model availability: %v", err)}
 		}
 
-		return CheckModelMsg{Available: true, Err: nil}
+		return CheckModelMsg{Available: available, ModelName: modelName, Err: nil}
+	}
+}
+
+func (m *model) pullModel() tea.Cmd {
+	return func() tea.Msg {
+		modelName := m.getCurrentProfile().Model
+		if err := pullModelIfNeeded(modelName); err != nil {
+			return CheckModelMsg{Available: false, ModelName: modelName, Err: fmt.Errorf("Failed to pull model: %v", err)}
+		}
+		return CheckModelMsg{Available: true, ModelName: modelName, Err: nil}
 	}
 }
 

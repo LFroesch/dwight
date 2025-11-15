@@ -185,6 +185,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.chatErr = msg.Err
 			m.chatState = ChatStateError
+		} else if !msg.Available {
+			// Model is not available, ask user if they want to pull it
+			m.chatState = ChatStateModelNotAvailable
+			m.modelPullName = msg.ModelName
 		} else {
 			m.chatState = ChatStateReady
 		}
@@ -198,6 +202,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatMessages = append(m.chatMessages, ChatMessage{
 				Role:         "assistant",
 				Content:      msg.Content,
+				Timestamp:    time.Now(),
 				Duration:     msg.Duration,
 				PromptTokens: msg.PromptTokens,
 				TotalTokens:  msg.TotalTokens,
@@ -493,11 +498,34 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.saveModelConfig()
 			return m, showStatus(fmt.Sprintf("Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}
+	case "y", "Y":
+		if m.chatState == ChatStateModelNotAvailable {
+			// User wants to pull the model
+			m.chatState = ChatStateCheckingModel
+			m.updateChatLines()
+			return m, tea.Batch(
+				m.pullModel(),
+				m.chatSpinner.Tick,
+			)
+		}
+	case "n", "N":
+		if m.chatState == ChatStateModelNotAvailable {
+			// User declined to pull the model, go back to menu
+			m.viewMode = ViewMenu
+			m.chatInput.Blur()
+			m.chatMessages = []ChatMessage{}
+			m.chatState = ChatStateInit
+			return m, nil
+		}
 	case "enter":
 		if m.chatState == ChatStateReady && m.chatInput.Value() != "" {
 			// Send message
 			userMsg := m.chatInput.Value()
-			m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: userMsg})
+			m.chatMessages = append(m.chatMessages, ChatMessage{
+				Role:      "user",
+				Content:   userMsg,
+				Timestamp: time.Now(),
+			})
 			m.chatInput.SetValue("")
 			m.chatState = ChatStateLoading
 			m.updateChatLines()
@@ -1200,15 +1228,23 @@ func (m *model) updateChatLines() {
 
 	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
-			userLabel := "👤 " + m.appSettings.UserName + ":"
+			timeStr := ""
+			if !msg.Timestamp.IsZero() {
+				timeStr = msg.Timestamp.Format("3:04PM") + " - "
+			}
+			userLabel := timeStr + "👤 " + m.appSettings.UserName + ":"
 			m.chatLines = append(m.chatLines, userLabel)
 			wrapped := wrapText(msg.Content, contentWidth)
 			m.chatLines = append(m.chatLines, wrapped...)
 			m.chatLines = append(m.chatLines, "")
 		} else {
-			header := "🤖 Assistant:"
+			timeStr := ""
+			if !msg.Timestamp.IsZero() {
+				timeStr = msg.Timestamp.Format("3:04PM") + " - "
+			}
+			header := timeStr + "🤖 Dwight:"
 			if msg.Duration > 0 {
-				header = fmt.Sprintf("🤖 Assistant: (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens)
+				header = fmt.Sprintf("%s🤖 Dwight: (%.1fs, %d tokens)", timeStr, msg.Duration.Seconds(), msg.TotalTokens)
 			}
 			m.chatLines = append(m.chatLines, header)
 			wrapped := wrapText(msg.Content, contentWidth)

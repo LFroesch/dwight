@@ -701,6 +701,13 @@ func (m model) viewChat() string {
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
 		content = []string{m.chatSpinner.View()}
+	case ChatStateModelNotAvailable:
+		content = []string{
+			fmt.Sprintf("⚠️  Model '%s' is not available on this system.", m.modelPullName),
+			"",
+			"Would you like to pull it now?",
+			"This may take a few minutes depending on the model size.",
+		}
 	case ChatStateError:
 		content = []string{fmt.Sprintf("❌ Error: %v", m.chatErr)}
 	case ChatStateReady, ChatStateLoading:
@@ -711,6 +718,8 @@ func (m model) viewChat() string {
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
 		footer = "Checking model availability..."
+	case ChatStateModelNotAvailable:
+		footer = "Press Y to pull the model, N to cancel"
 	case ChatStateError:
 		footer = "❌ Error - Press Esc to return to menu"
 	case ChatStateReady:
