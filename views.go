@@ -41,6 +41,9 @@ func (m model) View() string {
 	case ViewCreate:
 		return m.viewCreate()
 	case ViewChat:
+		if m.showResourcePicker {
+			return m.renderAttachedResourcesPicker()
+		}
 		return m.viewChat()
 	case ViewGlobalResources:
 		return m.viewGlobalResources()
@@ -58,6 +61,10 @@ func (m model) View() string {
 		return m.viewModelPull()
 	case ViewConfirmDialog:
 		return m.viewConfirmDialog()
+	case ViewConversationList:
+		return m.viewConversationList()
+	case ViewConversationExport:
+		return m.viewConversationExport()
 	}
 
 	return ""
@@ -693,54 +700,37 @@ CONFIGURATION:
 }
 
 func (m model) viewChat() string {
-	profile := m.getCurrentProfile()
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true)
-
-	header := titleStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model))
-
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
-	modelHint := hintStyle.Render("Tab: switch model | Ctrl+L: clear | Ctrl+S: save | ↑↓: scroll | Esc: menu")
+	// Use enhanced header with token counts
+	header := m.renderChatHeader()
 
 	var content []string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		content = []string{m.chatSpinner.View()}
+		content = []string{m.renderChatStateMessage()}
 	case ChatStateModelNotAvailable:
 		content = []string{
 			fmt.Sprintf("⚠️  Model '%s' is not available on this system.", m.modelPullName),
 			"",
 			"Would you like to pull it now?",
 			"This may take a few minutes depending on the model size.",
+			"",
+			"Press Y to pull the model, N to cancel",
 		}
 	case ChatStateError:
-		errorContent := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EF4444")).
-			Bold(true).
-			Render(fmt.Sprintf("❌ Error: %v", m.chatErr))
-		content = []string{errorContent}
+		content = []string{m.renderChatStateMessage()}
 	case ChatStateReady, ChatStateLoading:
 		content = m.getVisibleChatLines()
+		if m.chatState == ChatStateLoading {
+			content = append(content, "", m.renderChatStateMessage())
+		}
 	}
 
-	var footer string
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA"))
+	// Enhanced footer with better shortcuts
+	footer := m.renderChatFooter()
 
-	switch m.chatState {
-	case ChatStateInit, ChatStateCheckingModel:
-		footer = "Checking model availability..."
-	case ChatStateModelNotAvailable:
-		footer = "Press Y to pull the model, N to cancel"
-	case ChatStateError:
-		footer = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EF4444")).
-			Render("❌ Error - Press Esc to return to menu")
-	case ChatStateReady:
-		footer = "Type your message (Enter to send):\n" + m.chatTextArea.View() + "\n\nEsc: menu | Tab: switch model | Ctrl+S: save chat"
-	case ChatStateLoading:
-		footer = footerStyle.Render("⏳ Waiting for response...")
+	var inputArea string
+	if m.chatState == ChatStateReady {
+		inputArea = "\nType your message (Enter to send):\n" + m.chatTextArea.View()
 	}
 
 	// Show scroll position if scrolled
@@ -752,9 +742,9 @@ func (m model) viewChat() string {
 			Render(fmt.Sprintf(" [%d%%]", scrollPercent))
 	}
 
-	result := header + scrollInfo + "\n" + modelHint + "\n\n"
+	result := header + scrollInfo + "\n\n"
 	result += strings.Join(content, "\n")
-	result += "\n\n" + footer
+	result += inputArea + "\n\n" + footer
 
 	return result
 }

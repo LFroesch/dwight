@@ -85,6 +85,8 @@ const (
 	ViewModelCreate
 	ViewModelPull
 	ViewConfirmDialog
+	ViewConversationList
+	ViewConversationExport
 )
 
 type statusMsg struct {
@@ -161,6 +163,19 @@ type model struct {
 	sortBy          string
 	sortDesc        bool
 	confirmDialog   *ConfirmDialog
+	// Conversation management
+	currentConversation *Conversation
+	conversations       []ConversationMetadata
+	conversationSearch  string
+	selectedConv        int
+	// RAG (Retrieval Augmented Generation)
+	attachedResources   []string
+	showResourcePicker  bool
+	// Message selection for copy/edit
+	selectedMessage     int
+	showMessageMenu     bool
+	// Export
+	exportFormat        string
 }
 
 type ChatState int

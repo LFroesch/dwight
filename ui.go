@@ -160,7 +160,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ViewGlobalResources, ViewCleanup, ViewCleanupChats:
 			return m.updatePlaceholder(msg)
 		case ViewChat:
-			return m.updateChat(msg)
+			return m.updateChatEnhanced(msg)
 		case ViewModelManager:
 			return m.updateModelManager(msg)
 		case ViewModelCreate:
@@ -171,6 +171,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSettings(msg)
 		case ViewConfirmDialog:
 			return m.updateConfirmDialog(msg)
+		case ViewConversationList:
+			return m.updateConversationList(msg)
+		case ViewConversationExport:
+			return m.updateConversationExport(msg)
 		}
 
 	case spinner.TickMsg:
@@ -598,7 +602,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateLoading
 			m.updateChatLines()
 			return m, tea.Batch(
-				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1]),
+				sendChatMessage(userMsg, m.getCurrentProfile(), m.appSettings, m.chatMessages[:len(m.chatMessages)-1], m.attachedResources),
 				m.chatSpinner.Tick,
 			)
 		}
