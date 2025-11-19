@@ -70,6 +70,15 @@ func (m model) updateModelManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modelConfig.CurrentProfile = m.modelSelection
 		m.saveModelConfig()
 		return m, showStatus(fmt.Sprintf("✅ Default profile set to: %s", m.modelConfig.Profiles[m.modelSelection].Name))
+	case "b":
+		// Browse Ollama model library
+		m.viewMode = ViewModelLibrary
+		m.libraryModels = getPopularModels()
+		m.librarySelection = 0
+		m.libraryFilter = ""
+		// Load installed models
+		return m, refreshInstalledModels()
+
 	case "n":
 		m.viewMode = ViewModelCreate
 		m.modelInputs = make([]textinput.Model, 4)
@@ -175,7 +184,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateConversationList(msg)
 		case ViewConversationExport:
 			return m.updateConversationExport(msg)
+		case ViewModelLibrary:
+			return m.updateModelLibrary(msg)
 		}
+
+	case installedModelsMsg:
+		m.installedModels = msg.models
+		return m, showStatus(fmt.Sprintf("✅ Refreshed: %d models installed", len(msg.models)))
 
 	case spinner.TickMsg:
 		if m.chatState == ChatStateLoading || m.chatState == ChatStateCheckingModel {
@@ -1313,48 +1328,25 @@ func (m *model) updateChatLines() {
 	m.chatLines = []string{}
 
 	if len(m.chatMessages) == 0 && !m.chatStreaming {
-		m.chatLines = append(m.chatLines, "💬 Start a conversation with the AI assistant...")
+		m.chatLines = append(m.chatLines, "💬 Start a conversation...")
 		m.chatLines = append(m.chatLines, "")
-		m.chatLines = append(m.chatLines, "Commands:")
-		m.chatLines = append(m.chatLines, "  • Enter: Send message")
-		m.chatLines = append(m.chatLines, "  • Ctrl+L: Clear chat")
-		m.chatLines = append(m.chatLines, "  • Ctrl+S: Save chat")
-		m.chatLines = append(m.chatLines, "  • Tab: Switch model")
-		m.chatLines = append(m.chatLines, "  • Esc: Exit to menu")
+		m.chatLines = append(m.chatLines, "Enter: send | Tab: switch model | Esc: menu")
 		m.chatScrollPos = 0
 		return
 	}
 
-	for _, msg := range m.chatMessages {
-		if msg.Role == "user" {
-			userLabel := "👤 You:"
-			userLabelStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render(userLabel)
-			m.chatLines = append(m.chatLines, userLabelStyled)
-			wrapped := wrapText(msg.Content, contentWidth)
-			for _, line := range wrapped {
-				m.chatLines = append(m.chatLines, line)
-			}
-			m.chatLines = append(m.chatLines, "")
-		} else {
-			header := "🤖 AI:"
-			if msg.Duration > 0 {
-				tokPerSec := 0.0
-				if msg.Duration.Seconds() > 0 && msg.TotalTokens > 0 {
-					tokPerSec = float64(msg.TotalTokens-msg.PromptTokens) / msg.Duration.Seconds()
-				}
-				header = fmt.Sprintf("🤖 AI: %.1fs • %.0f tok/s", msg.Duration.Seconds(), tokPerSec)
-			}
-			headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
-			m.chatLines = append(m.chatLines, headerStyled)
+	// Use cached formatted lines when possible
+	for i := range m.chatMessages {
+		msg := &m.chatMessages[i]
 
-			// Apply markdown formatting
-			formatted := formatMessageContent(msg.Content)
-			wrapped := wrapText(formatted, contentWidth)
-			for _, line := range wrapped {
-				m.chatLines = append(m.chatLines, line)
-			}
-			m.chatLines = append(m.chatLines, "")
+		// Check if we need to reformat (width changed or not yet cached)
+		if msg.lastWidth != contentWidth || len(msg.formattedLines) == 0 {
+			msg.formattedLines = m.formatMessage(msg, contentWidth)
+			msg.lastWidth = contentWidth
 		}
+
+		// Append cached lines
+		m.chatLines = append(m.chatLines, msg.formattedLines...)
 	}
 
 	// Show streaming content
@@ -1381,6 +1373,38 @@ func (m *model) updateChatLines() {
 	} else {
 		m.chatScrollPos = 0
 	}
+}
+
+// formatMessage formats a single message and returns the lines (cached per message)
+func (m *model) formatMessage(msg *ChatMessage, contentWidth int) []string {
+	var lines []string
+
+	if msg.Role == "user" {
+		userLabel := "👤 You:"
+		userLabelStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render(userLabel)
+		lines = append(lines, userLabelStyled)
+		wrapped := wrapText(msg.Content, contentWidth)
+		lines = append(lines, wrapped...)
+		lines = append(lines, "")
+	} else {
+		header := "🤖 AI:"
+		if msg.Duration > 0 {
+			tokPerSec := 0.0
+			if msg.Duration.Seconds() > 0 && msg.TotalTokens > 0 {
+				tokPerSec = float64(msg.TotalTokens-msg.PromptTokens) / msg.Duration.Seconds()
+			}
+			header = fmt.Sprintf("🤖 AI: %.1fs • %.0f tok/s", msg.Duration.Seconds(), tokPerSec)
+		}
+		headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
+		lines = append(lines, headerStyled)
+
+		// Simple formatting without excessive styling
+		wrapped := wrapText(msg.Content, contentWidth)
+		lines = append(lines, wrapped...)
+		lines = append(lines, "")
+	}
+
+	return lines
 }
 
 // Clean file content renderer

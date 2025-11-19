@@ -68,6 +68,8 @@ func (m model) View() string {
 		content = m.viewConversationList()
 	case ViewConversationExport:
 		content = m.viewConversationExport()
+	case ViewModelLibrary:
+		content = m.viewModelLibrary()
 	default:
 		return ""
 	}
@@ -137,11 +139,13 @@ func (m model) viewModelManager() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Enter: set default") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓/Enter") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n: new profile, e: edit, p: pull model, d: delete") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Render("b: browse library") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back")
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n/e/p/d") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
 }

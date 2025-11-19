@@ -87,6 +87,7 @@ const (
 	ViewConfirmDialog
 	ViewConversationList
 	ViewConversationExport
+	ViewModelLibrary
 )
 
 type statusMsg struct {
@@ -158,6 +159,11 @@ type model struct {
 	modelPullName   string
 	modelPullStatus string
 	modelPullError  error
+	// Model library
+	libraryModels   []OllamaLibraryModel
+	installedModels []OllamaModel
+	librarySelection int
+	libraryFilter    string
 	appSettings     AppSettings
 	settingsInputs  []textinput.Model
 	sortBy          string
@@ -197,6 +203,9 @@ type ChatMessage struct {
 	Duration     time.Duration
 	PromptTokens int
 	TotalTokens  int
+	// Cache formatted lines to avoid re-rendering
+	formattedLines []string
+	lastWidth      int
 }
 
 type CheckModelMsg struct {
