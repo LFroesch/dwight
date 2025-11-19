@@ -22,52 +22,82 @@ func (m model) View() string {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B7280"))
 
+	var content string
 	switch m.viewMode {
 	case ViewMenu:
-		return m.viewMenu()
+		content = m.viewMenu()
 	case ViewResourceManager:
 		if m.showHelp {
-			return m.viewHelp()
+			content = m.viewHelp()
+		} else if m.editMode && len(m.inputs) > 0 {
+			content = m.editView()
+		} else {
+			content = m.viewResourceManager(errorStyle, successStyle, helpStyle)
 		}
-		if m.editMode && len(m.inputs) > 0 {
-			return m.editView()
-		}
-		return m.viewResourceManager(errorStyle, successStyle, helpStyle)
 	case ViewDetails:
 		if m.editMode && len(m.inputs) > 0 {
-			return m.editView()
+			content = m.editView()
+		} else {
+			content = m.viewDetails()
 		}
-		return m.viewDetails()
 	case ViewCreate:
-		return m.viewCreate()
+		content = m.viewCreate()
 	case ViewChat:
 		if m.showResourcePicker {
-			return m.renderAttachedResourcesPicker()
+			content = m.renderAttachedResourcesPicker()
+		} else {
+			content = m.viewChat()
 		}
-		return m.viewChat()
 	case ViewGlobalResources:
-		return m.viewGlobalResources()
+		content = m.viewGlobalResources()
 	case ViewSettings:
-		return m.viewSettings()
+		content = m.viewSettings()
 	case ViewCleanup:
-		return m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
+		content = m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
 	case ViewCleanupChats:
-		return m.viewCleanupChats()
+		content = m.viewCleanupChats()
 	case ViewModelManager:
-		return m.viewModelManager()
+		content = m.viewModelManager()
 	case ViewModelCreate:
-		return m.viewModelCreate()
+		content = m.viewModelCreate()
 	case ViewModelPull:
-		return m.viewModelPull()
+		content = m.viewModelPull()
 	case ViewConfirmDialog:
-		return m.viewConfirmDialog()
+		content = m.viewConfirmDialog()
 	case ViewConversationList:
-		return m.viewConversationList()
+		content = m.viewConversationList()
 	case ViewConversationExport:
-		return m.viewConversationExport()
+		content = m.viewConversationExport()
+	default:
+		return ""
 	}
 
-	return ""
+	// Ensure content fits within terminal bounds
+	return m.fitToTerminal(content)
+}
+
+// fitToTerminal ensures the view content fits within terminal dimensions
+func (m model) fitToTerminal(content string) string {
+	if m.height <= 0 || m.width <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+
+	// Truncate to terminal height
+	if len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+
+	// Truncate each line to terminal width and handle ANSI codes properly
+	for i, line := range lines {
+		// Use lipgloss to handle width properly with ANSI codes
+		if lipgloss.Width(line) > m.width {
+			lines[i] = lipgloss.NewStyle().Width(m.width).Render(line)
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (m model) viewModelManager() string {

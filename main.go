@@ -57,8 +57,8 @@ func main() {
 		configFile:  configFile,
 		currentDir:  currentDir,
 		projectRoot: projectRoot,
-		width:       100,
-		height:      24,
+		width:       80,  // Default to smaller, will be updated by WindowSizeMsg
+		height:      24,  // Default to smaller, will be updated by WindowSizeMsg
 		viewMode:    ViewMenu,
 		editMode:    false,
 		editField:   -1,
