@@ -1043,26 +1043,31 @@ func (m *model) adjustLayout() {
 	m.viewport.Height = tableHeight
 
 	// Update custom viewers size
-	m.chatMaxLines = m.height - 10
-	if m.chatMaxLines < 5 {
-		m.chatMaxLines = 5
+	// Chat: header(5) + input(5) + footer(2) + margins(3) = 15 lines overhead
+	m.chatMaxLines = m.height - 15
+	if m.chatMaxLines < 10 {
+		m.chatMaxLines = 10
 	}
 
-	m.fileMaxLines = m.height - 12 // Account for title, details, footer, borders, padding
+	m.fileMaxLines = m.height - 12
 	if m.fileMaxLines < 5 {
 		m.fileMaxLines = 5
 	}
 
-	// Update chatTextArea dimensions dynamically
-	textAreaWidth := m.width - 10
+	// Update chatTextArea dimensions - use almost full width
+	textAreaWidth := m.width - 6
 	if textAreaWidth < 40 {
 		textAreaWidth = 40
 	}
 	m.chatTextArea.SetWidth(textAreaWidth)
 
-	textAreaHeight := min(5, m.height/6) // Use at most 1/6 of screen height, max 5 lines
-	if textAreaHeight < 2 {
-		textAreaHeight = 2
+	// Responsive text area height based on terminal size
+	textAreaHeight := 3
+	if m.height > 40 {
+		textAreaHeight = 4
+	}
+	if m.height > 60 {
+		textAreaHeight = 5
 	}
 	m.chatTextArea.SetHeight(textAreaHeight)
 }
@@ -1320,34 +1325,24 @@ func (m *model) updateChatLines() {
 		return
 	}
 
-	for i, msg := range m.chatMessages {
-		// Add separator between messages (except before first message)
-		if i > 0 {
-			separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#374151")).Render(strings.Repeat("─", min(contentWidth, 80)))
-			m.chatLines = append(m.chatLines, separator)
-		}
-
+	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
-			timeStr := ""
-			if !msg.Timestamp.IsZero() {
-				timeStr = msg.Timestamp.Format("3:04PM") + " - "
-			}
-			userLabel := timeStr + "👤 " + m.appSettings.UserName + ":"
+			userLabel := "👤 You:"
 			userLabelStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render(userLabel)
 			m.chatLines = append(m.chatLines, userLabelStyled)
 			wrapped := wrapText(msg.Content, contentWidth)
 			for _, line := range wrapped {
-				m.chatLines = append(m.chatLines, "  "+line)
+				m.chatLines = append(m.chatLines, line)
 			}
 			m.chatLines = append(m.chatLines, "")
 		} else {
-			timeStr := ""
-			if !msg.Timestamp.IsZero() {
-				timeStr = msg.Timestamp.Format("3:04PM") + " - "
-			}
-			header := timeStr + "🤖 Dwight:"
+			header := "🤖 AI:"
 			if msg.Duration > 0 {
-				header = fmt.Sprintf("%s🤖 Dwight: (%.1fs, %d tokens)", timeStr, msg.Duration.Seconds(), msg.TotalTokens)
+				tokPerSec := 0.0
+				if msg.Duration.Seconds() > 0 && msg.TotalTokens > 0 {
+					tokPerSec = float64(msg.TotalTokens-msg.PromptTokens) / msg.Duration.Seconds()
+				}
+				header = fmt.Sprintf("🤖 AI: %.1fs • %.0f tok/s", msg.Duration.Seconds(), tokPerSec)
 			}
 			headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
 			m.chatLines = append(m.chatLines, headerStyled)
@@ -1356,7 +1351,7 @@ func (m *model) updateChatLines() {
 			formatted := formatMessageContent(msg.Content)
 			wrapped := wrapText(formatted, contentWidth)
 			for _, line := range wrapped {
-				m.chatLines = append(m.chatLines, "  "+line)
+				m.chatLines = append(m.chatLines, line)
 			}
 			m.chatLines = append(m.chatLines, "")
 		}

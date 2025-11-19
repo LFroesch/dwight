@@ -700,51 +700,57 @@ CONFIGURATION:
 }
 
 func (m model) viewChat() string {
-	// Use enhanced header with token counts
-	header := m.renderChatHeader()
+	profile := m.getCurrentProfile()
+
+	// Compact header - single line with key info
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+
+	totalTokens := 0
+	for _, msg := range m.chatMessages {
+		totalTokens += msg.TotalTokens
+	}
+
+	header := headerStyle.Render(fmt.Sprintf("🤖 %s", profile.Name))
+	if totalTokens > 0 {
+		contextLimit := getContextWindowSize(profile.Model)
+		header += statsStyle.Render(fmt.Sprintf(" | %d/%dk tok", totalTokens/1000, contextLimit/1000))
+	}
+	if len(m.attachedResources) > 0 {
+		header += statsStyle.Render(fmt.Sprintf(" | 📎%d", len(m.attachedResources)))
+	}
 
 	var content []string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		content = []string{m.renderChatStateMessage()}
+		content = []string{"🔄 Checking model..."}
 	case ChatStateModelNotAvailable:
 		content = []string{
-			fmt.Sprintf("⚠️  Model '%s' is not available on this system.", m.modelPullName),
-			"",
-			"Would you like to pull it now?",
-			"This may take a few minutes depending on the model size.",
-			"",
-			"Press Y to pull the model, N to cancel",
+			fmt.Sprintf("⚠️  Model '%s' not available. Press Y to pull, N to cancel", m.modelPullName),
 		}
 	case ChatStateError:
-		content = []string{m.renderChatStateMessage()}
+		errorMsg := "Error occurred"
+		if m.chatErr != nil {
+			errorMsg = m.chatErr.Error()
+		}
+		content = []string{lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Render("❌ " + errorMsg)}
 	case ChatStateReady, ChatStateLoading:
 		content = m.getVisibleChatLines()
-		if m.chatState == ChatStateLoading {
-			content = append(content, "", m.renderChatStateMessage())
-		}
 	}
 
-	// Enhanced footer with better shortcuts
-	footer := m.renderChatFooter()
-
+	// Input area
 	var inputArea string
 	if m.chatState == ChatStateReady {
-		inputArea = "\nType your message (Enter to send):\n" + m.chatTextArea.View()
+		inputArea = m.chatTextArea.View()
+	} else if m.chatState == ChatStateLoading {
+		inputArea = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render(fmt.Sprintf("%s Generating...", m.chatSpinner.View()))
 	}
 
-	// Show scroll position if scrolled
-	scrollInfo := ""
-	if len(m.chatLines) > m.chatMaxLines && m.chatScrollPos > 0 {
-		scrollPercent := int(float64(m.chatScrollPos) / float64(len(m.chatLines)-m.chatMaxLines) * 100)
-		scrollInfo = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280")).
-			Render(fmt.Sprintf(" [%d%%]", scrollPercent))
-	}
-
-	result := header + scrollInfo + "\n\n"
+	result := header + "\n\n"
 	result += strings.Join(content, "\n")
-	result += inputArea + "\n\n" + footer
+	if inputArea != "" {
+		result += "\n\n" + inputArea
+	}
 
 	return result
 }
