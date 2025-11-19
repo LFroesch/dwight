@@ -11,20 +11,20 @@ import (
 // viewConversationList displays all saved conversations
 func (m model) viewConversationList() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
+		Foreground(lipgloss.Color("#A78BFA")).
 		Bold(true)
 	title := titleStyle.Render("💬 Conversation History")
 
 	selectedStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("#7C3AED")).
-		Foreground(lipgloss.Color("#F3F4F6")).
+		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
 
 	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB"))
+		Foreground(lipgloss.Color("#FFFFFF"))
 
 	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#6B7280"))
+		Foreground(lipgloss.Color("#9CA3AF"))
 
 	var content strings.Builder
 
@@ -35,7 +35,7 @@ func (m model) viewConversationList() string {
 	if len(m.conversations) == 0 {
 		content.WriteString(dimStyle.Render("No conversations found. Start chatting to create one!\n"))
 	} else {
-		content.WriteString(fmt.Sprintf("📚 %d conversations\n\n", len(m.conversations)))
+		content.WriteString(dimStyle.Render(fmt.Sprintf("📚 %d conversations\n\n", len(m.conversations))))
 
 		// Display conversations
 		for i, conv := range m.conversations {
@@ -61,11 +61,11 @@ func (m model) viewConversationList() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("\nCommands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Enter: load") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("d: delete, e: export, /: search") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back")
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("↑↓/Enter") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("d/e/s") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), footer)
 }
@@ -73,7 +73,7 @@ func (m model) viewConversationList() string {
 // viewConversationExport displays export options
 func (m model) viewConversationExport() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
+		Foreground(lipgloss.Color("#A78BFA")).
 		Bold(true)
 
 	if m.selectedConv >= len(m.conversations) {
@@ -83,10 +83,11 @@ func (m model) viewConversationExport() string {
 	conv := m.conversations[m.selectedConv]
 	title := titleStyle.Render(fmt.Sprintf("📤 Export: %s", conv.Title))
 
+	optionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 	options := []string{
-		"1. Export as Markdown (.md)",
-		"2. Export as JSON (.json)",
-		"3. Export as Plain Text (.txt)",
+		optionStyle.Render("1. Export as Markdown (.md)"),
+		optionStyle.Render("2. Export as JSON (.json)"),
+		optionStyle.Render("3. Export as Plain Text (.txt)"),
 	}
 
 	content := strings.Join(options, "\n")
@@ -94,9 +95,9 @@ func (m model) viewConversationExport() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("\nCommands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("1-3: select format") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("1-3") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, footer)
 }

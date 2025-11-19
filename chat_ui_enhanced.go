@@ -157,24 +157,27 @@ func (m model) renderMessageWithTokens(msg ChatMessage, index int) []string {
 // renderAttachedResourcesPicker shows available resources to attach
 func (m model) renderAttachedResourcesPicker() string {
 	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
+		Foreground(lipgloss.Color("#A78BFA")).
 		Bold(true)
 
 	title := titleStyle.Render("📎 Attach Resources to Chat")
 
 	selectedStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("#7C3AED")).
-		Foreground(lipgloss.Color("#F3F4F6")).
+		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true)
 
 	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E5E7EB"))
+		Foreground(lipgloss.Color("#FFFFFF"))
 
 	attachedStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#34D399"))
+		Foreground(lipgloss.Color("#10B981"))
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#9CA3AF"))
 
 	var content strings.Builder
-	content.WriteString("Select resources to provide context to the AI:\n\n")
+	content.WriteString(dimStyle.Render("Select resources to provide context to the AI:\n\n"))
 
 	// Show available resources
 	for i, res := range m.resources {
@@ -210,9 +213,11 @@ func (m model) renderAttachedResourcesPicker() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("\nCommands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Space: toggle, Enter: done") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Render("↑↓/Space/Enter") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("a: all, c: clear") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), footer)
 }
