@@ -53,39 +53,64 @@ func (m model) viewModelLibrary() string {
 
 	if len(models) == 0 {
 		content.WriteString(dimStyle.Render("No models match your filter.\n"))
-	}
-
-	// Display models
-	for i, model := range models {
-		// Check if installed
-		isInstalled := checkModelInstalled(model.Name, m.installedModels)
-		model.Installed = isInstalled
-
-		// Create model line with name, description, and size
-		line := fmt.Sprintf("%-25s %s (%s)",
-			model.Name,
-			truncate(model.Description, 50),
-			model.Size)
-
-		if i == m.librarySelection {
-			if isInstalled {
-				content.WriteString(selectedStyle.Render("> ✓ " + line))
-			} else {
-				content.WriteString(selectedStyle.Render("> " + line))
-			}
-		} else if isInstalled {
-			content.WriteString(installedStyle.Render("✓ " + line))
-		} else {
-			content.WriteString(normalStyle.Render(line))
+	} else {
+		// Calculate visible window (estimate 2 lines per model with tags)
+		maxVisibleModels := (m.height - 10) / 2 // Account for header/footer
+		if maxVisibleModels < 5 {
+			maxVisibleModels = 5
 		}
-		content.WriteString("\n")
 
-		// Show tags on next line
-		if len(model.Tags) > 0 {
-			tags := strings.Join(model.Tags, ", ")
-			tagLine := fmt.Sprintf("  Tags: %s", tags)
-			content.WriteString(dimStyle.Render(tagLine))
+		// Calculate scroll offset to keep selection visible
+		scrollOffset := 0
+		if m.librarySelection >= maxVisibleModels {
+			scrollOffset = m.librarySelection - maxVisibleModels + 1
+		}
+
+		// Display only visible models
+		endIdx := scrollOffset + maxVisibleModels
+		if endIdx > len(models) {
+			endIdx = len(models)
+		}
+
+		for i := scrollOffset; i < endIdx; i++ {
+			model := models[i]
+			// Check if installed
+			isInstalled := checkModelInstalled(model.Name, m.installedModels)
+			model.Installed = isInstalled
+
+			// Create model line with name, description, and size
+			line := fmt.Sprintf("%-25s %s (%s)",
+				model.Name,
+				truncate(model.Description, 50),
+				model.Size)
+
+			if i == m.librarySelection {
+				if isInstalled {
+					content.WriteString(selectedStyle.Render("> ✓ " + line))
+				} else {
+					content.WriteString(selectedStyle.Render("> " + line))
+				}
+			} else if isInstalled {
+				content.WriteString(installedStyle.Render("✓ " + line))
+			} else {
+				content.WriteString(normalStyle.Render(line))
+			}
 			content.WriteString("\n")
+
+			// Show tags on next line
+			if len(model.Tags) > 0 {
+				tags := strings.Join(model.Tags, ", ")
+				tagLine := fmt.Sprintf("  Tags: %s", tags)
+				content.WriteString(dimStyle.Render(tagLine))
+				content.WriteString("\n")
+			}
+		}
+
+		// Show scroll indicator if there are more items
+		if len(models) > maxVisibleModels {
+			scrollInfo := dimStyle.Render(fmt.Sprintf("\n[Showing %d-%d of %d models]",
+				scrollOffset+1, endIdx, len(models)))
+			content.WriteString(scrollInfo)
 		}
 	}
 
