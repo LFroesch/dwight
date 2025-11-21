@@ -581,8 +581,8 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case "ctrl+n":
-		// Switch to next model (Ctrl+N for Next)
+	case "alt+.":
+		// Switch to next model (Alt+. like > symbol)
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
@@ -591,8 +591,8 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "ctrl+p":
-		// Switch to previous model (Ctrl+P for Previous)
+	case "alt+,":
+		// Switch to previous model (Alt+, like < symbol)
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
@@ -1345,7 +1345,7 @@ func (m *model) updateChatLines() {
 	if len(m.chatMessages) == 0 && !m.chatStreaming {
 		m.chatLines = append(m.chatLines, "💬 Start a conversation...")
 		m.chatLines = append(m.chatLines, "")
-		m.chatLines = append(m.chatLines, "Enter: send | Ctrl+N/P: switch model | Esc: menu")
+		m.chatLines = append(m.chatLines, "Enter: send | Alt+,/.: switch model | Esc: menu")
 		m.chatScrollPos = 0
 		return
 	}
