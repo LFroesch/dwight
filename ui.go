@@ -436,6 +436,7 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.modelInputs[nextField].Focus()
 			}
 		}
+		return m, nil
 	}
 
 	// Update the focused input
