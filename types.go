@@ -69,13 +69,6 @@ type ModelConfig struct {
 	CurrentProfile int            `json:"current_profile"`
 }
 
-type OllamaModel struct {
-	Name       string    `json:"name"`
-	ModifiedAt time.Time `json:"modified_at"`
-	Size       int64     `json:"size"`
-	Digest     string    `json:"digest"`
-}
-
 type ViewMode int
 
 const (
