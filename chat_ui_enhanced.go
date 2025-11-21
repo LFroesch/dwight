@@ -124,17 +124,14 @@ func (m model) renderMessageWithTokens(msg ChatMessage, index int) []string {
 
 		// Add token and timing info for assistant messages
 		tokenInfo := ""
-		if msg.Duration > 0 {
-			tokensPerSec := 0.0
-			if msg.Duration.Seconds() > 0 {
-				tokensPerSec = float64(msg.TotalTokens-msg.PromptTokens) / msg.Duration.Seconds()
-			}
+		if msg.Duration > 0 && msg.TotalTokens > 0 {
+			responseTokens := msg.TotalTokens - msg.PromptTokens
 			tokenInfo = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#A78BFA")).
-				Render(fmt.Sprintf(" • %.1fs • %d tokens (%.1f tok/s)",
+				Render(fmt.Sprintf(" • %.1fs | prompt: %d, response: %d",
 					msg.Duration.Seconds(),
-					msg.TotalTokens,
-					tokensPerSec))
+					msg.PromptTokens,
+					responseTokens))
 		}
 
 		header = assistantStyle.Render(fmt.Sprintf("🤖 Assistant • %s", msg.Timestamp.Format("3:04 PM"))) + tokenInfo

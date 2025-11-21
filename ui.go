@@ -585,15 +585,19 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
+			m.updateChatLines() // Update to show new model in header
 			return m, showStatus(fmt.Sprintf("🔄 Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}
+		return m, nil
 
 	case "shift+tab":
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
+			m.updateChatLines() // Update to show new model in header
 			return m, showStatus(fmt.Sprintf("🔄 Switched to %s", m.modelConfig.Profiles[m.modelConfig.CurrentProfile].Name))
 		}
+		return m, nil
 	case "y", "Y":
 		if m.chatState == ChatStateModelNotAvailable {
 			// User wants to pull the model
@@ -1387,20 +1391,27 @@ func (m *model) formatMessage(msg *ChatMessage, contentWidth int) []string {
 	var lines []string
 
 	if msg.Role == "user" {
-		userLabel := "👤 You:"
+		timeStr := ""
+		if !msg.Timestamp.IsZero() {
+			timeStr = msg.Timestamp.Format("3:04PM") + " • "
+		}
+		userLabel := timeStr + "👤 You:"
 		userLabelStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#60A5FA")).Render(userLabel)
 		lines = append(lines, userLabelStyled)
 		wrapped := wrapText(msg.Content, contentWidth)
 		lines = append(lines, wrapped...)
 		lines = append(lines, "")
 	} else {
-		header := "🤖 AI:"
-		if msg.Duration > 0 {
-			tokPerSec := 0.0
-			if msg.Duration.Seconds() > 0 && msg.TotalTokens > 0 {
-				tokPerSec = float64(msg.TotalTokens-msg.PromptTokens) / msg.Duration.Seconds()
-			}
-			header = fmt.Sprintf("🤖 AI: %.1fs • %.0f tok/s", msg.Duration.Seconds(), tokPerSec)
+		// Add timestamp
+		timeStr := ""
+		if !msg.Timestamp.IsZero() {
+			timeStr = msg.Timestamp.Format("3:04PM") + " • "
+		}
+
+		header := timeStr + "🤖 AI:"
+		if msg.Duration > 0 && msg.TotalTokens > 0 {
+			responseTokens := msg.TotalTokens - msg.PromptTokens
+			header = fmt.Sprintf("%s🤖 AI: %.1fs | prompt: %d, response: %d", timeStr, msg.Duration.Seconds(), msg.PromptTokens, responseTokens)
 		}
 		headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
 		lines = append(lines, headerStyled)

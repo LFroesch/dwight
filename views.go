@@ -746,9 +746,9 @@ func (m model) viewChat() string {
 	}
 
 	header := headerStyle.Render(fmt.Sprintf("🤖 %s", profile.Name))
-	if totalTokens > 0 {
+	if len(m.chatMessages) > 0 {
 		contextLimit := getContextWindowSize(profile.Model)
-		header += statsStyle.Render(fmt.Sprintf(" | %d/%dk tok", totalTokens/1000, contextLimit/1000))
+		header += statsStyle.Render(fmt.Sprintf(" | context: %d/%dk tokens", totalTokens, contextLimit/1000))
 	}
 	if len(m.attachedResources) > 0 {
 		header += statsStyle.Render(fmt.Sprintf(" | 📎%d", len(m.attachedResources)))

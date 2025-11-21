@@ -60,24 +60,22 @@ func (m model) viewModelLibrary() string {
 		isInstalled := checkModelInstalled(model.Name, m.installedModels)
 		model.Installed = isInstalled
 
-		indicator := "  "
-		if isInstalled {
-			indicator = "✓ "
-		}
-
 		// Create model line with name, description, and size
-		line := fmt.Sprintf("%s%-25s %s (%s)",
-			indicator,
+		line := fmt.Sprintf("%-25s %s (%s)",
 			model.Name,
 			truncate(model.Description, 50),
 			model.Size)
 
 		if i == m.librarySelection {
-			content.WriteString(selectedStyle.Render("> " + line))
+			if isInstalled {
+				content.WriteString(selectedStyle.Render("> ✓ " + line))
+			} else {
+				content.WriteString(selectedStyle.Render("> " + line))
+			}
 		} else if isInstalled {
-			content.WriteString(installedStyle.Render("  " + line))
+			content.WriteString(installedStyle.Render("  ✓ " + line))
 		} else {
-			content.WriteString(normalStyle.Render("  " + line))
+			content.WriteString(normalStyle.Render("    " + line))
 		}
 		content.WriteString("\n")
 
