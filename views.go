@@ -178,7 +178,7 @@ func (m model) viewModelCreate() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Ctrl+J/K or ↑↓: move fields, Enter: save") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
 
@@ -283,7 +283,7 @@ func (m model) viewSettings() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Ctrl+J/K or ↑↓: move fields, Enter: save") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
 

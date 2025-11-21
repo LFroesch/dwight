@@ -407,8 +407,8 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, showStatus("❌ Please fill in at least name and model")
-	case "tab", "\t":
-		// Handle Tab - move to next field
+	case "ctrl+j", "down":
+		// Move to next field (Ctrl+J or Down arrow)
 		if len(m.modelInputs) > 0 {
 			currentField := -1
 			for i, input := range m.modelInputs {
@@ -421,12 +421,11 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.modelInputs[currentField].Blur()
 				nextField := (currentField + 1) % len(m.modelInputs)
 				m.modelInputs[nextField].Focus()
-				return m, nil
 			}
 		}
 		return m, nil
-	case "shift+tab", "backtab":
-		// Handle Shift+Tab - move to previous field
+	case "ctrl+k", "up":
+		// Move to previous field (Ctrl+K or Up arrow)
 		if len(m.modelInputs) > 0 {
 			currentField := -1
 			for i, input := range m.modelInputs {
@@ -439,21 +438,17 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.modelInputs[currentField].Blur()
 				nextField := (currentField - 1 + len(m.modelInputs)) % len(m.modelInputs)
 				m.modelInputs[nextField].Focus()
-				return m, nil
 			}
 		}
 		return m, nil
 	}
 
-	// DON'T update inputs if we somehow reach here after handling tab
-	// Only update for actual character input
-	if keyStr != "tab" && keyStr != "\t" && keyStr != "shift+tab" && keyStr != "backtab" {
-		for i := range m.modelInputs {
-			if m.modelInputs[i].Focused() {
-				var cmd tea.Cmd
-				m.modelInputs[i], cmd = m.modelInputs[i].Update(msg)
-				return m, cmd
-			}
+	// Update the focused input for character typing
+	for i := range m.modelInputs {
+		if m.modelInputs[i].Focused() {
+			var cmd tea.Cmd
+			m.modelInputs[i], cmd = m.modelInputs[i].Update(msg)
+			return m, cmd
 		}
 	}
 	return m, nil
