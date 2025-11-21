@@ -1,5 +1,7 @@
 # Compiled binary
 dwight
+dwight-test
+dwight-*
 
 # Build artifacts
 *.exe
