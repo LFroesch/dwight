@@ -581,7 +581,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case "tab":
+	case "tab", "ctrl+]":
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
@@ -590,7 +590,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "shift+tab":
+	case "shift+tab", "ctrl+[":
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			m.saveModelConfig()
@@ -1343,7 +1343,7 @@ func (m *model) updateChatLines() {
 	if len(m.chatMessages) == 0 && !m.chatStreaming {
 		m.chatLines = append(m.chatLines, "💬 Start a conversation...")
 		m.chatLines = append(m.chatLines, "")
-		m.chatLines = append(m.chatLines, "Enter: send | Tab: switch model | Esc: menu")
+		m.chatLines = append(m.chatLines, "Enter: send | Ctrl+]: switch model | Esc: menu")
 		m.chatScrollPos = 0
 		return
 	}
@@ -1411,7 +1411,7 @@ func (m *model) formatMessage(msg *ChatMessage, contentWidth int) []string {
 		header := timeStr + "🤖 AI:"
 		if msg.Duration > 0 && msg.TotalTokens > 0 {
 			responseTokens := msg.TotalTokens - msg.PromptTokens
-			header = fmt.Sprintf("%s🤖 AI: %.1fs | prompt: %d, response: %d", timeStr, msg.Duration.Seconds(), msg.PromptTokens, responseTokens)
+			header = fmt.Sprintf("%s🤖 AI: %.1fs | p:%d r:%d t:%d", timeStr, msg.Duration.Seconds(), msg.PromptTokens, responseTokens, msg.TotalTokens)
 		}
 		headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
 		lines = append(lines, headerStyled)

@@ -35,7 +35,8 @@ func (m model) viewConversationList() string {
 	if len(m.conversations) == 0 {
 		content.WriteString(dimStyle.Render("No conversations found. Start chatting to create one!\n"))
 	} else {
-		content.WriteString(dimStyle.Render(fmt.Sprintf("📚 %d conversations\n\n", len(m.conversations))))
+		content.WriteString(dimStyle.Render(fmt.Sprintf("📚 %d conversations", len(m.conversations))))
+		content.WriteString("\n\n")
 
 		// Display conversations
 		for i, conv := range m.conversations {

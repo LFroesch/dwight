@@ -34,7 +34,8 @@ func (m model) viewModelLibrary() string {
 		content.WriteString(dimStyle.Render(fmt.Sprintf("🔍 Filter: %s\n\n", m.libraryFilter)))
 	}
 
-	content.WriteString(dimStyle.Render("Popular Models (press Enter to install):\n\n"))
+	content.WriteString(dimStyle.Render("Popular Models (press Enter to install):"))
+	content.WriteString("\n\n")
 
 	// Filter models if filter is active
 	models := m.libraryModels

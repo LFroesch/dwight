@@ -128,10 +128,11 @@ func (m model) renderMessageWithTokens(msg ChatMessage, index int) []string {
 			responseTokens := msg.TotalTokens - msg.PromptTokens
 			tokenInfo = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#A78BFA")).
-				Render(fmt.Sprintf(" • %.1fs | prompt: %d, response: %d",
+				Render(fmt.Sprintf(" • %.1fs | p:%d r:%d t:%d",
 					msg.Duration.Seconds(),
 					msg.PromptTokens,
-					responseTokens))
+					responseTokens,
+					msg.TotalTokens))
 		}
 
 		header = assistantStyle.Render(fmt.Sprintf("🤖 Assistant • %s", msg.Timestamp.Format("3:04 PM"))) + tokenInfo
