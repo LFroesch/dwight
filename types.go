@@ -93,6 +93,9 @@ const (
 	ViewModelCreate
 	ViewModelPull
 	ViewConfirmDialog
+	ViewConversationList
+	ViewConversationExport
+	ViewModelLibrary
 )
 
 type statusMsg struct {
@@ -157,27 +160,39 @@ type model struct {
 	fileLines       []string
 	fileScrollPos   int
 	fileMaxLines    int
-	modelConfig     ModelConfig
-	modelSelection  int
-	currentModel    string
+	modelConfig      ModelConfig
+	modelSelection   int
+	currentModel     string
 	modelInputs      []textinput.Model
 	modelPullName    string
 	modelPullStatus  string
 	modelPullError   error
-	availableModels  []OllamaModel
-	modelListTable   table.Model
-	showModelList    bool
-	popularModels    []string
-	appSettings     AppSettings
-	settingsInputs  []textinput.Model
-	sortBy          string
-	sortDesc        bool
+	// Model library
+	libraryModels    []OllamaLibraryModel
+	installedModels  []OllamaModel
+	librarySelection int
+	libraryFilter    string
+	appSettings      AppSettings
+	settingsInputs   []textinput.Model
+	sortBy           string
+	sortDesc         bool
 	confirmDialog    *ConfirmDialog
+	// Conversation management
+	currentConversation *Conversation
+	conversations       []ConversationMetadata
+	conversationSearch  string
+	selectedConv        int
+	// Chat history (from my branch)
 	chatHistoryTable table.Model
 	chatHistoryFiles []ChatHistoryFile
-	attachedFiles    []AttachedFile
-	showFileSelector bool
-	fileSelectorPath string
+	// RAG (Retrieval Augmented Generation)
+	attachedResources []string
+	showResourcePicker bool
+	// Message selection for copy/edit
+	selectedMessage int
+	showMessageMenu bool
+	// Export
+	exportFormat string
 }
 
 type ChatState int
@@ -199,6 +214,9 @@ type ChatMessage struct {
 	Duration     time.Duration
 	PromptTokens int
 	TotalTokens  int
+	// Cache formatted lines to avoid re-rendering
+	formattedLines []string
+	lastWidth      int
 }
 
 type ChatHistoryFile struct {

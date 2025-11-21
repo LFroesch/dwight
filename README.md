@@ -6,11 +6,16 @@ Terminal-based AI resource manager and assistant powered by Docker + Ollama with
 
 ### 🤖 AI Chat
 - **Streaming Responses**: Real-time AI responses as they generate
-- **Multi-line Input**: Full textarea support for longer messages (4000 char limit)
+- **Multi-line Input**: Full textarea support for longer messages (8000 char limit)
 - **Markdown Rendering**: Code blocks, headers, and lists automatically formatted
 - **Model Switching**: Quick model switching with Tab/Shift+Tab
-- **Chat Management**: Save, clear, and export conversations
+- **Conversation Management**: Save, load, resume, and delete conversations
+- **Export Conversations**: Export to Markdown, JSON, or plain text formats
 - **Custom Profiles**: Multiple AI model profiles with custom system prompts
+- **Token Tracking**: Real-time token count and context window usage display
+- **Context Window Management**: Auto-trim conversations to fit model limits
+- **RAG Support**: Attach local resources as context for AI responses
+- **Smart Chat Stats**: View response time, tokens/second, and conversation metrics
 
 ### 📁 Resource Management
 - **Local Resources**: Browse and manage files in current directory
@@ -23,7 +28,11 @@ Terminal-based AI resource manager and assistant powered by Docker + Ollama with
 ### ⌨️ Chat Shortcuts
 - `Enter` - Send message
 - `Ctrl+L` - Clear chat without exiting
-- `Ctrl+S` - Save chat log manually
+- `Ctrl+S` - Save current conversation
+- `Ctrl+O` - Open conversation history
+- `Ctrl+N` - Start new conversation
+- `Ctrl+R` - Attach/detach resources for RAG
+- `Ctrl+T` - Trim conversation to fit context window
 - `Tab` - Switch to next model
 - `Shift+Tab` - Switch to previous model
 - `↑/↓` - Scroll through chat history
@@ -70,12 +79,36 @@ Create custom AI profiles with different models and system prompts:
 - **General Assistant** (llama3.2:3b) - General purpose conversations
 - **Creative Writer** (llama3.2:3b) - Creative and descriptive writing
 
+## 💬 Conversation Management
+
+Conversations are automatically saved as structured JSON files in `./conversations/` and can be:
+- **Loaded and resumed** at any time
+- **Searched and filtered** by title, model, or content
+- **Exported** to Markdown, JSON, or plain text
+- **Tagged and organized** for easy retrieval
+
+Each conversation includes:
+- Complete message history with timestamps
+- Token usage statistics
+- Model and profile information
+- Attached resources for context
+
 ## 💾 Chat Logs
 
-Chat logs are automatically saved to `./chats/` with format:
+Legacy chat logs are saved to `./chats/` with format:
 ```
 MM_DD_YY_H_MM_AM/PM_modelname.txt
 ```
+
+## 📎 RAG (Retrieval Augmented Generation)
+
+Attach local files as context for your AI conversations:
+1. Press `Ctrl+R` in chat to open the resource picker
+2. Use `↑↓` to navigate, `Space` to toggle selection
+3. Press `Enter` to attach selected resources
+4. The AI will use the file contents to provide contextual answers
+
+Supported file types: `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.toml`, `.go`, `.py`, `.js`, `.ts`
 
 ## ⚙️ Configuration
 

@@ -22,47 +22,84 @@ func (m model) View() string {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#6B7280"))
 
+	var content string
 	switch m.viewMode {
 	case ViewMenu:
-		return m.viewMenu()
+		content = m.viewMenu()
 	case ViewResourceManager:
 		if m.showHelp {
-			return m.viewHelp()
+			content = m.viewHelp()
+		} else if m.editMode && len(m.inputs) > 0 {
+			content = m.editView()
+		} else {
+			content = m.viewResourceManager(errorStyle, successStyle, helpStyle)
 		}
-		if m.editMode && len(m.inputs) > 0 {
-			return m.editView()
-		}
-		return m.viewResourceManager(errorStyle, successStyle, helpStyle)
 	case ViewDetails:
 		if m.editMode && len(m.inputs) > 0 {
-			return m.editView()
+			content = m.editView()
+		} else {
+			content = m.viewDetails()
 		}
-		return m.viewDetails()
 	case ViewCreate:
-		return m.viewCreate()
+		content = m.viewCreate()
 	case ViewChat:
-		return m.viewChat()
-	case ViewChatHistory:
-		return m.viewChatHistory()
+		if m.showResourcePicker {
+			content = m.renderAttachedResourcesPicker()
+		} else {
+			content = m.viewChat()
+		}
 	case ViewGlobalResources:
-		return m.viewGlobalResources()
+		content = m.viewGlobalResources()
 	case ViewSettings:
-		return m.viewSettings()
+		content = m.viewSettings()
 	case ViewCleanup:
-		return m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
+		content = m.viewPlaceholder("Clean Up Resources", "🧹 Resource cleanup coming soon...", "This feature will help identify and remove unused or outdated AI resources.")
 	case ViewCleanupChats:
-		return m.viewCleanupChats()
+		content = m.viewCleanupChats()
 	case ViewModelManager:
-		return m.viewModelManager()
+		content = m.viewModelManager()
 	case ViewModelCreate:
-		return m.viewModelCreate()
+		content = m.viewModelCreate()
 	case ViewModelPull:
-		return m.viewModelPull()
+		content = m.viewModelPull()
 	case ViewConfirmDialog:
-		return m.viewConfirmDialog()
+		content = m.viewConfirmDialog()
+	case ViewConversationList:
+		content = m.viewConversationList()
+	case ViewConversationExport:
+		content = m.viewConversationExport()
+	case ViewModelLibrary:
+		content = m.viewModelLibrary()
+	default:
+		return ""
 	}
 
-	return ""
+	// Ensure content fits within terminal bounds
+	return m.fitToTerminal(content)
+}
+
+// fitToTerminal ensures the view content fits within terminal dimensions
+func (m model) fitToTerminal(content string) string {
+	if m.height <= 0 || m.width <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+
+	// Truncate to terminal height
+	if len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+
+	// Truncate each line to terminal width and handle ANSI codes properly
+	for i, line := range lines {
+		// Use lipgloss to handle width properly with ANSI codes
+		if lipgloss.Width(line) > m.width {
+			lines[i] = lipgloss.NewStyle().Width(m.width).Render(line)
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (m model) viewModelManager() string {
@@ -102,11 +139,13 @@ func (m model) viewModelManager() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓: navigate, Enter: set default") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("↑↓/Enter") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n: new profile, e: edit, p: pull model, d: delete") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#A78BFA")).Render("b: browse library") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: back")
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render("n/e/p/d") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc")
 
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
 }
@@ -139,68 +178,11 @@ func (m model) viewModelCreate() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next, Ctrl+M: model list, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
 
-	if m.showModelList {
-		modelListView := m.viewModelList()
-		return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", modelListView, "", footer)
-	}
-
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
-}
-
-func (m model) viewModelList() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true)
-	title := titleStyle.Render("📦 Available Models")
-
-	if len(m.availableModels) == 0 && len(m.popularModels) == 0 {
-		emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
-		return lipgloss.JoinVertical(lipgloss.Left,
-			title,
-			"",
-			emptyStyle.Render("Loading models..."),
-		)
-	}
-
-	var content string
-	if len(m.availableModels) > 0 {
-		localTitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#34D399")).
-			Bold(true).
-			Render("Local Models:")
-		models := []string{}
-		for _, model := range m.availableModels {
-			size := formatSize(model.Size)
-			models = append(models, fmt.Sprintf("  • %s (%s)", model.Name, size))
-		}
-		content = lipgloss.JoinVertical(lipgloss.Left, localTitle, strings.Join(models, "\n"))
-	}
-
-	if len(m.popularModels) > 0 {
-		popularTitle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FBBF24")).
-			Bold(true).
-			Render("\nPopular Models to Pull:")
-		models := []string{}
-		for _, model := range m.popularModels {
-			models = append(models, "  • "+model)
-		}
-		if content != "" {
-			content += "\n\n"
-		}
-		content += lipgloss.JoinVertical(lipgloss.Left, popularTitle, strings.Join(models, "\n"))
-	}
-
-	hint := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#9CA3AF")).
-		Italic(true).
-		Render("\nType or copy a model name from above")
-
-	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, hint)
 }
 
 func (m model) viewModelPull() string {
@@ -754,89 +736,57 @@ CONFIGURATION:
 func (m model) viewChat() string {
 	profile := m.getCurrentProfile()
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true)
+	// Compact header - single line with key info
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
 
-	header := titleStyle.Render(fmt.Sprintf("🤖 Ollama Chat - %s (%s)", profile.Name, profile.Model))
+	totalTokens := 0
+	for _, msg := range m.chatMessages {
+		totalTokens += msg.TotalTokens
+	}
 
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
-	modelHint := hintStyle.Render("Tab: switch model | Ctrl+L: clear | Ctrl+S: save | ↑↓: scroll | Esc: menu")
+	header := headerStyle.Render(fmt.Sprintf("🤖 %s", profile.Name))
+	if totalTokens > 0 {
+		contextLimit := getContextWindowSize(profile.Model)
+		header += statsStyle.Render(fmt.Sprintf(" | %d/%dk tok", totalTokens/1000, contextLimit/1000))
+	}
+	if len(m.attachedResources) > 0 {
+		header += statsStyle.Render(fmt.Sprintf(" | 📎%d", len(m.attachedResources)))
+	}
 
 	var content []string
 	switch m.chatState {
 	case ChatStateInit, ChatStateCheckingModel:
-		content = []string{m.chatSpinner.View()}
+		content = []string{"🔄 Checking model..."}
 	case ChatStateModelNotAvailable:
 		content = []string{
-			fmt.Sprintf("⚠️  Model '%s' is not available on this system.", m.modelPullName),
-			"",
-			"Would you like to pull it now?",
-			"This may take a few minutes depending on the model size.",
+			fmt.Sprintf("⚠️  Model '%s' not available. Press Y to pull, N to cancel", m.modelPullName),
 		}
 	case ChatStateError:
-		errorContent := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EF4444")).
-			Bold(true).
-			Render(fmt.Sprintf("❌ Error: %v", m.chatErr))
-		content = []string{errorContent}
+		errorMsg := "Error occurred"
+		if m.chatErr != nil {
+			errorMsg = m.chatErr.Error()
+		}
+		content = []string{lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444")).Render("❌ " + errorMsg)}
 	case ChatStateReady, ChatStateLoading:
 		content = m.getVisibleChatLines()
 	}
 
-	var footer string
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA"))
-
-	switch m.chatState {
-	case ChatStateInit, ChatStateCheckingModel:
-		footer = "Checking model availability..."
-	case ChatStateModelNotAvailable:
-		footer = "Press Y to pull the model, N to cancel"
-	case ChatStateError:
-		footer = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#EF4444")).
-			Render("❌ Error - Press Esc to return to menu")
-	case ChatStateReady:
-		footer = "Type your message (Enter to send):\n" + m.chatTextArea.View() + "\n\nEsc: menu | Tab: switch model | Ctrl+S: save chat"
-	case ChatStateLoading:
-		footer = footerStyle.Render("⏳ Waiting for response...")
+	// Input area
+	var inputArea string
+	if m.chatState == ChatStateReady {
+		inputArea = m.chatTextArea.View()
+	} else if m.chatState == ChatStateLoading {
+		inputArea = lipgloss.NewStyle().Foreground(lipgloss.Color("#FBBF24")).Render(fmt.Sprintf("%s Generating...", m.chatSpinner.View()))
 	}
 
-	// Show scroll position if scrolled
-	scrollInfo := ""
-	if len(m.chatLines) > m.chatMaxLines && m.chatScrollPos > 0 {
-		scrollPercent := int(float64(m.chatScrollPos) / float64(len(m.chatLines)-m.chatMaxLines) * 100)
-		scrollInfo = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280")).
-			Render(fmt.Sprintf(" [%d%%]", scrollPercent))
-	}
-
-	result := header + scrollInfo + "\n" + modelHint + "\n\n"
+	result := header + "\n\n"
 	result += strings.Join(content, "\n")
-	result += "\n\n" + footer
+	if inputArea != "" {
+		result += "\n\n" + inputArea
+	}
 
 	return result
-}
-
-func (m model) viewChatHistory() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#7C3AED")).
-		Bold(true)
-
-	header := titleStyle.Render("📚 Chat History")
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
-	hint := hintStyle.Render("Enter: Load chat | d: Delete | Esc: Back to menu")
-
-	if len(m.chatHistoryFiles) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280")).
-			Italic(true)
-		empty := emptyStyle.Render("No chat history found. Start a new conversation to create chat logs!")
-
-		return header + "\n" + hint + "\n\n" + empty
-	}
-
-	return header + "\n" + hint + "\n\n" + m.chatHistoryTable.View()
 }
 
 func (m model) editView() string {

@@ -284,7 +284,7 @@ func (m *model) pullModel() tea.Cmd {
 }
 
 // Streaming chat function - collects response with streaming API
-func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
+func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage, attachedResources []string) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
 		client := &http.Client{Timeout: time.Duration(appSettings.ChatTimeout) * time.Second}
@@ -295,6 +295,23 @@ func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings 
 		if appSettings.MainPrompt != "" {
 			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
 		}
+
+		// Add attached resources to system prompt for RAG
+		if len(attachedResources) > 0 {
+			var resourceContent strings.Builder
+			resourceContent.WriteString("\n\n=== ATTACHED RESOURCES ===\n\n")
+			for _, path := range attachedResources {
+				if data, err := os.ReadFile(path); err == nil {
+					resourceContent.WriteString(fmt.Sprintf("--- File: %s ---\n", filepath.Base(path)))
+					resourceContent.WriteString(string(data))
+					resourceContent.WriteString("\n\n")
+				}
+			}
+			resourceContent.WriteString("=== END RESOURCES ===\n\n")
+			resourceContent.WriteString("Use the above resources to provide context when answering questions.")
+			systemPrompt += resourceContent.String()
+		}
+
 		if systemPrompt != "" {
 			messages = append(messages, map[string]string{
 				"role":    "system",
@@ -386,7 +403,7 @@ func sendChatMessageStreaming(userMsg string, profile ModelProfile, appSettings 
 }
 
 // Non-streaming fallback
-func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage) tea.Cmd {
+func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettings, chatHistory []ChatMessage, attachedResources []string) tea.Cmd {
 	return func() tea.Msg {
 		startTime := time.Now()
 		timeout := time.Duration(appSettings.ChatTimeout) * time.Second
@@ -398,6 +415,23 @@ func sendChatMessage(userMsg string, profile ModelProfile, appSettings AppSettin
 		if appSettings.MainPrompt != "" {
 			systemPrompt = appSettings.MainPrompt + "\n\n" + systemPrompt
 		}
+
+		// Add attached resources to system prompt for RAG
+		if len(attachedResources) > 0 {
+			var resourceContent strings.Builder
+			resourceContent.WriteString("\n\n=== ATTACHED RESOURCES ===\n\n")
+			for _, path := range attachedResources {
+				if data, err := os.ReadFile(path); err == nil {
+					resourceContent.WriteString(fmt.Sprintf("--- File: %s ---\n", filepath.Base(path)))
+					resourceContent.WriteString(string(data))
+					resourceContent.WriteString("\n\n")
+				}
+			}
+			resourceContent.WriteString("=== END RESOURCES ===\n\n")
+			resourceContent.WriteString("Use the above resources to provide context when answering questions.")
+			systemPrompt += resourceContent.String()
+		}
+
 		if systemPrompt != "" {
 			messages = append(messages, map[string]string{
 				"role":    "system",
