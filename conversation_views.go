@@ -53,7 +53,7 @@ func (m model) viewConversationList() string {
 			if i == m.selectedConv {
 				content.WriteString(selectedStyle.Render("> " + line))
 			} else {
-				content.WriteString(normalStyle.Render("  " + line))
+				content.WriteString(normalStyle.Render(line))
 			}
 			content.WriteString("\n")
 		}

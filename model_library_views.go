@@ -74,21 +74,17 @@ func (m model) viewModelLibrary() string {
 				content.WriteString(selectedStyle.Render("> " + line))
 			}
 		} else if isInstalled {
-			content.WriteString(installedStyle.Render("  ✓ " + line))
+			content.WriteString(installedStyle.Render("✓ " + line))
 		} else {
-			content.WriteString(normalStyle.Render("    " + line))
+			content.WriteString(normalStyle.Render(line))
 		}
 		content.WriteString("\n")
 
 		// Show tags on next line
 		if len(model.Tags) > 0 {
 			tags := strings.Join(model.Tags, ", ")
-			tagLine := fmt.Sprintf("    Tags: %s", tags)
-			if i == m.librarySelection {
-				content.WriteString(dimStyle.Render(tagLine))
-			} else {
-				content.WriteString(dimStyle.Render(tagLine))
-			}
+			tagLine := fmt.Sprintf("  Tags: %s", tags)
+			content.WriteString(dimStyle.Render(tagLine))
 			content.WriteString("\n")
 		}
 	}
