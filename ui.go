@@ -1372,9 +1372,7 @@ func (m *model) updateChatLines() {
 		m.chatLines = append(m.chatLines, "")
 	}
 
-	if m.chatState == ChatStateLoading {
-		m.chatLines = append(m.chatLines, fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
-	}
+	// Removed duplicate spinner - input area already shows loading state
 
 	// Auto-scroll to bottom when new content is added
 	if len(m.chatLines) > m.chatMaxLines {
