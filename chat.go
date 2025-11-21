@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -559,7 +560,8 @@ func (m *model) saveChatLog() error {
 		} else {
 			content.WriteString("ASSISTANT")
 			if msg.Duration > 0 {
-				content.WriteString(fmt.Sprintf(" (%.1fs, %d tokens)", msg.Duration.Seconds(), msg.TotalTokens))
+				responseTokens := msg.TotalTokens - msg.PromptTokens
+				content.WriteString(fmt.Sprintf(" (%.1fs | prompt: %d, response: %d)", msg.Duration.Seconds(), msg.PromptTokens, responseTokens))
 			}
 			content.WriteString(":\n")
 			content.WriteString(msg.Content)
@@ -644,4 +646,119 @@ func formatMessageContent(content string) string {
 	}
 
 	return strings.Join(formatted, "\n")
+}
+
+// Load chat history files from the chats directory
+func (m *model) loadChatHistoryFiles() error {
+	chatsDir := filepath.Join(m.currentDir, "chats")
+	if _, err := os.Stat(chatsDir); os.IsNotExist(err) {
+		m.chatHistoryFiles = []ChatHistoryFile{}
+		return nil
+	}
+
+	files, err := os.ReadDir(chatsDir)
+	if err != nil {
+		return err
+	}
+
+	m.chatHistoryFiles = []ChatHistoryFile{}
+	for _, file := range files {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".txt") {
+			continue
+		}
+
+		info, err := file.Info()
+		if err != nil {
+			continue
+		}
+
+		// Extract model name from filename (format: MM_DD_YY_H_MM_AM/PM_ModelName.txt)
+		parts := strings.Split(file.Name(), "_")
+		modelName := "unknown"
+		if len(parts) > 6 {
+			modelName = strings.TrimSuffix(strings.Join(parts[6:], "_"), ".txt")
+			modelName = strings.ReplaceAll(modelName, "_", ":")
+		}
+
+		m.chatHistoryFiles = append(m.chatHistoryFiles, ChatHistoryFile{
+			Filename:  file.Name(),
+			Path:      filepath.Join(chatsDir, file.Name()),
+			Timestamp: info.ModTime(),
+			Model:     modelName,
+			Size:      info.Size(),
+		})
+	}
+
+	// Sort by timestamp, most recent first
+	sort.Slice(m.chatHistoryFiles, func(i, j int) bool {
+		return m.chatHistoryFiles[i].Timestamp.After(m.chatHistoryFiles[j].Timestamp)
+	})
+
+	return nil
+}
+
+// Load a chat from a history file
+func (m *model) loadChatFromHistory(filepath string) error {
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	m.chatMessages = []ChatMessage{}
+
+	var currentMessage *ChatMessage
+	var contentBuilder strings.Builder
+
+	for _, line := range lines {
+		// Check for user message start
+		if line == "USER:" {
+			// Save previous message if exists
+			if currentMessage != nil {
+				currentMessage.Content = strings.TrimSpace(contentBuilder.String())
+				m.chatMessages = append(m.chatMessages, *currentMessage)
+			}
+			currentMessage = &ChatMessage{Role: "user"}
+			contentBuilder.Reset()
+			continue
+		}
+
+		// Check for assistant message start
+		if strings.HasPrefix(line, "ASSISTANT") {
+			// Save previous message if exists
+			if currentMessage != nil {
+				currentMessage.Content = strings.TrimSpace(contentBuilder.String())
+				m.chatMessages = append(m.chatMessages, *currentMessage)
+			}
+			currentMessage = &ChatMessage{Role: "assistant"}
+			contentBuilder.Reset()
+			continue
+		}
+
+		// Skip separator lines and header lines
+		if strings.HasPrefix(line, "===") || strings.HasPrefix(line, "---") ||
+			strings.HasPrefix(line, "Chat Log -") ||
+			strings.HasPrefix(line, "Model:") ||
+			strings.HasPrefix(line, "Profile:") ||
+			line == "" {
+			continue
+		}
+
+		// Add content to current message
+		if currentMessage != nil {
+			if contentBuilder.Len() > 0 {
+				contentBuilder.WriteString("\n")
+			}
+			contentBuilder.WriteString(line)
+		}
+	}
+
+	// Save last message
+	if currentMessage != nil {
+		currentMessage.Content = strings.TrimSpace(contentBuilder.String())
+		m.chatMessages = append(m.chatMessages, *currentMessage)
+	}
+
+	m.updateChatLines()
+	return nil
 }

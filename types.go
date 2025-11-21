@@ -69,6 +69,13 @@ type ModelConfig struct {
 	CurrentProfile int            `json:"current_profile"`
 }
 
+type OllamaModel struct {
+	Name       string    `json:"name"`
+	ModifiedAt time.Time `json:"modified_at"`
+	Size       int64     `json:"size"`
+	Digest     string    `json:"digest"`
+}
+
 type ViewMode int
 
 const (
@@ -77,6 +84,7 @@ const (
 	ViewDetails
 	ViewCreate
 	ViewChat
+	ViewChatHistory
 	ViewGlobalResources
 	ViewSettings
 	ViewCleanup
@@ -152,15 +160,24 @@ type model struct {
 	modelConfig     ModelConfig
 	modelSelection  int
 	currentModel    string
-	modelInputs     []textinput.Model
-	modelPullName   string
-	modelPullStatus string
-	modelPullError  error
+	modelInputs      []textinput.Model
+	modelPullName    string
+	modelPullStatus  string
+	modelPullError   error
+	availableModels  []OllamaModel
+	modelListTable   table.Model
+	showModelList    bool
+	popularModels    []string
 	appSettings     AppSettings
 	settingsInputs  []textinput.Model
 	sortBy          string
 	sortDesc        bool
-	confirmDialog   *ConfirmDialog
+	confirmDialog    *ConfirmDialog
+	chatHistoryTable table.Model
+	chatHistoryFiles []ChatHistoryFile
+	attachedFiles    []AttachedFile
+	showFileSelector bool
+	fileSelectorPath string
 }
 
 type ChatState int
@@ -182,6 +199,21 @@ type ChatMessage struct {
 	Duration     time.Duration
 	PromptTokens int
 	TotalTokens  int
+}
+
+type ChatHistoryFile struct {
+	Filename  string
+	Path      string
+	Timestamp time.Time
+	Model     string
+	Size      int64
+}
+
+type AttachedFile struct {
+	Name    string
+	Path    string
+	Content string
+	Size    int64
 }
 
 type CheckModelMsg struct {

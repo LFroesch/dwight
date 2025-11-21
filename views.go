@@ -42,6 +42,8 @@ func (m model) View() string {
 		return m.viewCreate()
 	case ViewChat:
 		return m.viewChat()
+	case ViewChatHistory:
+		return m.viewChatHistory()
 	case ViewGlobalResources:
 		return m.viewGlobalResources()
 	case ViewSettings:
@@ -137,11 +139,68 @@ func (m model) viewModelCreate() string {
 	footer := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#60A5FA")).
 		Render("Commands: ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next field, Enter: save") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("Tab: next, Ctrl+M: model list, Enter: save") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Render(" • ") +
 		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("esc: cancel")
 
+	if m.showModelList {
+		modelListView := m.viewModelList()
+		return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", modelListView, "", footer)
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", footer)
+}
+
+func (m model) viewModelList() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+	title := titleStyle.Render("📦 Available Models")
+
+	if len(m.availableModels) == 0 && len(m.popularModels) == 0 {
+		emptyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+		return lipgloss.JoinVertical(lipgloss.Left,
+			title,
+			"",
+			emptyStyle.Render("Loading models..."),
+		)
+	}
+
+	var content string
+	if len(m.availableModels) > 0 {
+		localTitle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#34D399")).
+			Bold(true).
+			Render("Local Models:")
+		models := []string{}
+		for _, model := range m.availableModels {
+			size := formatSize(model.Size)
+			models = append(models, fmt.Sprintf("  • %s (%s)", model.Name, size))
+		}
+		content = lipgloss.JoinVertical(lipgloss.Left, localTitle, strings.Join(models, "\n"))
+	}
+
+	if len(m.popularModels) > 0 {
+		popularTitle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FBBF24")).
+			Bold(true).
+			Render("\nPopular Models to Pull:")
+		models := []string{}
+		for _, model := range m.popularModels {
+			models = append(models, "  • "+model)
+		}
+		if content != "" {
+			content += "\n\n"
+		}
+		content += lipgloss.JoinVertical(lipgloss.Left, popularTitle, strings.Join(models, "\n"))
+	}
+
+	hint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#9CA3AF")).
+		Italic(true).
+		Render("\nType or copy a model name from above")
+
+	return lipgloss.JoinVertical(lipgloss.Left, title, "", content, hint)
 }
 
 func (m model) viewModelPull() string {
@@ -757,6 +816,27 @@ func (m model) viewChat() string {
 	result += "\n\n" + footer
 
 	return result
+}
+
+func (m model) viewChatHistory() string {
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#7C3AED")).
+		Bold(true)
+
+	header := titleStyle.Render("📚 Chat History")
+	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9CA3AF"))
+	hint := hintStyle.Render("Enter: Load chat | d: Delete | Esc: Back to menu")
+
+	if len(m.chatHistoryFiles) == 0 {
+		emptyStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6B7280")).
+			Italic(true)
+		empty := emptyStyle.Render("No chat history found. Start a new conversation to create chat logs!")
+
+		return header + "\n" + hint + "\n\n" + empty
+	}
+
+	return header + "\n" + hint + "\n\n" + m.chatHistoryTable.View()
 }
 
 func (m model) editView() string {

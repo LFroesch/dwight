@@ -120,3 +120,62 @@ func (m *model) getCurrentProfile() ModelProfile {
 	}
 	return defaultProfiles[0]
 }
+
+// Fetch available models from Ollama API
+func fetchOllamaModels() ([]OllamaModel, error) {
+	// Ensure container is running
+	if err := ensureOllamaContainer(); err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(ollamaURL + "/api/tags")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch models: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Models []OllamaModel `json:"models"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	return result.Models, nil
+}
+
+// Get popular Ollama models (curated list)
+func getPopularOllamaModels() []string {
+	return []string{
+		"llama3.2:1b",
+		"llama3.2:3b",
+		"llama3.1:8b",
+		"qwen2.5-coder:7b",
+		"qwen2.5:7b",
+		"mistral:7b",
+		"phi3:3.8b",
+		"gemma2:2b",
+		"codellama:7b",
+		"deepseek-coder:6.7b",
+		"neural-chat:7b",
+		"starling-lm:7b",
+	}
+}
+
+type FetchModelsMsg struct {
+	Models []OllamaModel
+	Err    error
+}
+
+func fetchModelsCmd() tea.Cmd {
+	return func() tea.Msg {
+		models, err := fetchOllamaModels()
+		return FetchModelsMsg{Models: models, Err: err}
+	}
+}

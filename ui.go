@@ -161,6 +161,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updatePlaceholder(msg)
 		case ViewChat:
 			return m.updateChat(msg)
+		case ViewChatHistory:
+			return m.updateChatHistory(msg)
 		case ViewModelManager:
 			return m.updateModelManager(msg)
 		case ViewModelCreate:
@@ -265,6 +267,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modelPullStatus = ""
 		} else {
 			m.modelPullStatus = fmt.Sprintf("✅ Successfully pulled model: %s", m.modelPullName)
+		}
+		return m, nil
+
+	case FetchModelsMsg:
+		if msg.Err == nil {
+			m.availableModels = msg.Models
 		}
 		return m, nil
 	}
@@ -417,6 +425,15 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.modelInputs[nextField].Focus()
 			}
 		}
+	case "ctrl+m":
+		// Toggle model list display
+		m.showModelList = !m.showModelList
+		if m.showModelList && len(m.availableModels) == 0 && len(m.popularModels) == 0 {
+			// Fetch models
+			m.popularModels = getPopularOllamaModels()
+			return m, fetchModelsCmd()
+		}
+		return m, nil
 	}
 
 	// Update the focused input
@@ -466,9 +483,16 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.chatSpinner.Tick,
 			)
 		case 2:
+			// Chat History
+			m.viewMode = ViewChatHistory
+			if err := m.loadChatHistoryFiles(); err != nil {
+				return m, showStatus("❌ Error loading chat history: " + err.Error())
+			}
+			m.initChatHistoryTable()
+		case 3:
 			m.viewMode = ViewGlobalResources
 			m.scanGlobalResources()
-		case 3:
+		case 4:
 			m.viewMode = ViewSettings
 			// Initialize settings inputs
 			m.settingsInputs = make([]textinput.Model, 4)
@@ -493,18 +517,18 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsInputs[3] = textinput.New()
 			m.settingsInputs[3].SetValue(fmt.Sprintf("%d", m.appSettings.ChatTimeout))
 			m.settingsInputs[3].CharLimit = 10
-		case 4:
+		case 5:
 			// Stop Ollama container
 			go stopOllamaContainer()
 			return m, showStatus("🛑 Ollama container stopped to free memory")
-		case 5:
-			m.viewMode = ViewCleanup
 		case 6:
-			m.viewMode = ViewCleanupChats
+			m.viewMode = ViewCleanup
 		case 7:
+			m.viewMode = ViewCleanupChats
+		case 8:
 			m.viewMode = ViewModelManager
 			m.modelSelection = m.modelConfig.CurrentProfile
-		case 8:
+		case 9:
 			return m, tea.Quit
 		}
 		return m, nil
@@ -1343,7 +1367,8 @@ func (m *model) updateChatLines() {
 			}
 			header := timeStr + "🤖 Dwight:"
 			if msg.Duration > 0 {
-				header = fmt.Sprintf("%s🤖 Dwight: (%.1fs, %d tokens)", timeStr, msg.Duration.Seconds(), msg.TotalTokens)
+				responseTokens := msg.TotalTokens - msg.PromptTokens
+				header = fmt.Sprintf("%s🤖 Dwight: (%.1fs | prompt: %d, response: %d)", timeStr, msg.Duration.Seconds(), msg.PromptTokens, responseTokens)
 			}
 			headerStyled := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#34D399")).Render(header)
 			m.chatLines = append(m.chatLines, headerStyled)
@@ -1372,9 +1397,7 @@ func (m *model) updateChatLines() {
 		m.chatLines = append(m.chatLines, "")
 	}
 
-	if m.chatState == ChatStateLoading {
-		m.chatLines = append(m.chatLines, fmt.Sprintf("%s Thinking...", m.chatSpinner.View()))
-	}
+	// Removed duplicate spinner - footer already shows loading state
 
 	// Auto-scroll to bottom when new content is added
 	if len(m.chatLines) > m.chatMaxLines {
@@ -1426,4 +1449,90 @@ func (m *model) handleChatScroll(key string) {
 	case "end":
 		m.chatScrollPos = maxScroll
 	}
+}
+
+// Initialize chat history table
+func (m *model) initChatHistoryTable() {
+	columns := []table.Column{
+		{Title: "Date", Width: 20},
+		{Title: "Model", Width: 25},
+		{Title: "Size", Width: 10},
+	}
+
+	rows := []table.Row{}
+	for _, f := range m.chatHistoryFiles {
+		size := fmt.Sprintf("%.1f KB", float64(f.Size)/1024)
+		rows = append(rows, table.Row{
+			f.Timestamp.Format("01/02/06 3:04PM"),
+			f.Model,
+			size,
+		})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(min(len(rows)+1, 15)),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#374151")).
+		BorderBottom(true).
+		Bold(true).
+		Foreground(lipgloss.Color("#7C3AED"))
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("#1F2937")).
+		Background(lipgloss.Color("#7C3AED")).
+		Bold(false)
+	t.SetStyles(s)
+
+	m.chatHistoryTable = t
+}
+
+// Update chat history view
+func (m model) updateChatHistory(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.viewMode = ViewMenu
+		return m, nil
+	case "enter":
+		if len(m.chatHistoryFiles) == 0 {
+			return m, nil
+		}
+		selected := m.chatHistoryTable.Cursor()
+		if selected >= 0 && selected < len(m.chatHistoryFiles) {
+			err := m.loadChatFromHistory(m.chatHistoryFiles[selected].Path)
+			if err != nil {
+				return m, showStatus("❌ Error loading chat: " + err.Error())
+			}
+			m.viewMode = ViewChat
+			m.chatState = ChatStateReady
+			m.chatTextArea.Focus()
+			return m, showStatus("✅ Chat loaded successfully")
+		}
+	case "d":
+		// Delete selected chat
+		if len(m.chatHistoryFiles) == 0 {
+			return m, nil
+		}
+		selected := m.chatHistoryTable.Cursor()
+		if selected >= 0 && selected < len(m.chatHistoryFiles) {
+			filepath := m.chatHistoryFiles[selected].Path
+			err := os.Remove(filepath)
+			if err != nil {
+				return m, showStatus("❌ Error deleting chat: " + err.Error())
+			}
+			// Reload history
+			m.loadChatHistoryFiles()
+			m.initChatHistoryTable()
+			return m, showStatus("🗑️ Chat deleted")
+		}
+	}
+
+	var cmd tea.Cmd
+	m.chatHistoryTable, cmd = m.chatHistoryTable.Update(msg)
+	return m, cmd
 }
