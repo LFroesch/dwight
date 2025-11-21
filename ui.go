@@ -472,7 +472,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 0:
 			m.viewMode = ViewResourceManager
 		case 1:
-			// Replace the existing case 1 with this:
+			// Chat with Ollama
 			m.viewMode = ViewChat
 			m.chatState = ChatStateCheckingModel
 			m.chatTextArea.Focus()
@@ -485,9 +485,18 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.chatSpinner.Tick,
 			)
 		case 2:
+			// Conversation History
+			m.viewMode = ViewConversationList
+			convs, err := m.listConversations()
+			if err == nil {
+				m.conversations = convs
+				m.selectedConv = 0
+			}
+			return m, nil
+		case 3:
 			m.viewMode = ViewGlobalResources
 			m.scanGlobalResources()
-		case 3:
+		case 4:
 			m.viewMode = ViewSettings
 			// Initialize settings inputs
 			m.settingsInputs = make([]textinput.Model, 4)
@@ -512,18 +521,18 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.settingsInputs[3] = textinput.New()
 			m.settingsInputs[3].SetValue(fmt.Sprintf("%d", m.appSettings.ChatTimeout))
 			m.settingsInputs[3].CharLimit = 10
-		case 4:
+		case 5:
 			// Stop Ollama container
 			go stopOllamaContainer()
 			return m, showStatus("🛑 Ollama container stopped to free memory")
-		case 5:
-			m.viewMode = ViewCleanup
 		case 6:
-			m.viewMode = ViewCleanupChats
+			m.viewMode = ViewCleanup
 		case 7:
+			m.viewMode = ViewCleanupChats
+		case 8:
 			m.viewMode = ViewModelManager
 			m.modelSelection = m.modelConfig.CurrentProfile
-		case 8:
+		case 9:
 			return m, tea.Quit
 		}
 		return m, nil

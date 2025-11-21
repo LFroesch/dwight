@@ -128,7 +128,7 @@ func main() {
 	menuRows := []table.Row{
 		{"Resource Manager", "Manage AI resources, templates, and prompts"},
 		{"Chat with Ollama", "Interactive AI chat interface"},
-		{"Chat History", "Browse and load previous conversations"},
+		{"Conversation History", "Browse and load previous conversations"},
 		{"View Global Resources", "Browse system-wide AI resources"},
 		{"Settings", "Configure Dwight preferences"},
 		{"Stop Ollama", "Stop Ollama container to free memory"},

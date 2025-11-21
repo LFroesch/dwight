@@ -77,7 +77,6 @@ const (
 	ViewDetails
 	ViewCreate
 	ViewChat
-	ViewChatHistory
 	ViewGlobalResources
 	ViewSettings
 	ViewCleanup
