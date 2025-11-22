@@ -407,8 +407,8 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, showStatus("❌ Please fill in at least name and model")
-	case "ctrl+j", "down":
-		// Move to next field (Ctrl+J or Down arrow)
+	case "alt+j", "]":
+		// Move to next field
 		if len(m.modelInputs) > 0 {
 			currentField := -1
 			for i, input := range m.modelInputs {
@@ -424,8 +424,8 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "ctrl+k", "up":
-		// Move to previous field (Ctrl+K or Up arrow)
+	case "alt+k", "[":
+		// Move to previous field
 		if len(m.modelInputs) > 0 {
 			currentField := -1
 			for i, input := range m.modelInputs {
