@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -80,7 +81,10 @@ type StreamChunkMsg struct {
 	TotalTokens  int
 }
 
+type streamStartedMsg struct{ ch <-chan ollama.StreamChunk }
+
 type ClearChatMsg struct{}
+type InterruptMsg struct{}
 
 type ModelPullMsg struct {
 	Success bool
@@ -154,7 +158,13 @@ type model struct {
 	chatScrollPos    int
 	chatMaxLines     int
 	chatStreaming     bool
-	chatStreamBuffer strings.Builder
+	chatStreamBuffer *strings.Builder
+	chatStreamCh     <-chan ollama.StreamChunk
+	cancelChat       context.CancelFunc // cancels in-flight generation
+
+	// Copy mode — navigate messages, yank to clipboard
+	chatCopyMode bool
+	chatCopyIdx  int // index into chatMessages (-1 = last)
 
 	// Conversation management
 	currentConversation *storage.Conversation

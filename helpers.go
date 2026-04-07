@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -49,7 +50,15 @@ func (m *model) updateChatLines() {
 			msg.formattedLines = formatChatMessage(msg, contentWidth)
 			msg.lastWidth = contentWidth
 		}
-		m.chatLines = append(m.chatLines, msg.formattedLines...)
+		if m.chatCopyMode && i == m.chatCopyIdx && len(msg.formattedLines) > 0 {
+			// Highlight selected message header in copy mode
+			highlighted := make([]string, len(msg.formattedLines))
+			copy(highlighted, msg.formattedLines)
+			highlighted[0] = s.Selected.Render("► ") + highlighted[0]
+			m.chatLines = append(m.chatLines, highlighted...)
+		} else {
+			m.chatLines = append(m.chatLines, msg.formattedLines...)
+		}
 	}
 
 	// Streaming content — use fallback renderer (glamour is expensive mid-stream)
@@ -90,8 +99,12 @@ func formatChatMessage(msg *ChatMessage, width int) []string {
 		header := timeStr + "AI:"
 		if msg.Duration > 0 && msg.TotalTokens > 0 {
 			respTokens := msg.TotalTokens - msg.PromptTokens
-			header = fmt.Sprintf("%sAI: %.1fs | p:%d r:%d t:%d",
-				timeStr, msg.Duration.Seconds(), msg.PromptTokens, respTokens, msg.TotalTokens)
+			tokPerSec := 0.0
+			if msg.Duration.Seconds() > 0 {
+				tokPerSec = float64(respTokens) / msg.Duration.Seconds()
+			}
+			header = fmt.Sprintf("%sAI: %.1fs · %.0f tok/s · %d tok",
+				timeStr, msg.Duration.Seconds(), tokPerSec, respTokens)
 		}
 		lines = append(lines, s.AssistantMsg.Render(header))
 		rendered := renderMarkdown(msg.Content, width)
@@ -370,6 +383,25 @@ func (m *model) scanAttachableFiles() []string {
 	return files
 }
 
+// copyToClipboard writes text to the system clipboard.
+// Tries wl-copy (Wayland/WSLg), clip.exe (WSL2), then xclip.
+func copyToClipboard(text string) error {
+	cmds := [][]string{
+		{"wl-copy"},
+		{"clip.exe"},
+		{"xclip", "-selection", "clipboard"},
+		{"xsel", "--clipboard", "--input"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stdin = strings.NewReader(text)
+		if err := cmd.Run(); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("no clipboard tool found (wl-copy, clip.exe, xclip, xsel)")
+}
+
 func readFileContent(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -394,7 +426,6 @@ func (m *model) scanProjectFiles() []string {
 	}
 
 	var files []string
-	gitignore := loadGitignore(m.currentDir)
 
 	filepath.WalkDir(m.currentDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -417,11 +448,6 @@ func (m *model) scanProjectFiles() []string {
 			if strings.Count(rel, string(os.PathSeparator)) >= 4 {
 				return filepath.SkipDir
 			}
-			return nil
-		}
-
-		// Check gitignore
-		if isGitignored(rel, gitignore) {
 			return nil
 		}
 
@@ -448,40 +474,6 @@ func (m *model) scanProjectFiles() []string {
 	return files
 }
 
-// loadGitignore reads .gitignore patterns from the project root.
-func loadGitignore(dir string) []string {
-	data, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if err != nil {
-		return nil
-	}
-	var patterns []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "#") {
-			patterns = append(patterns, line)
-		}
-	}
-	return patterns
-}
-
-// isGitignored checks if a relative path matches any gitignore pattern.
-func isGitignored(rel string, patterns []string) bool {
-	for _, pat := range patterns {
-		// Simple matching: exact name, prefix dir, or glob
-		pat = strings.TrimSuffix(pat, "/")
-		if matched, _ := filepath.Match(pat, filepath.Base(rel)); matched {
-			return true
-		}
-		if matched, _ := filepath.Match(pat, rel); matched {
-			return true
-		}
-		// Directory prefix match
-		if strings.HasPrefix(rel, pat+string(os.PathSeparator)) {
-			return true
-		}
-	}
-	return false
-}
 
 // fuzzyMatch filters files by a query using character-sequence matching (fzf-style).
 // All query chars must appear in order in the path. Scoring favors basename matches,

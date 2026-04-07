@@ -218,11 +218,15 @@ func (m model) viewChat() string {
 	}
 
 	var footer string
-	switch m.chatState {
-	case ChatStateReview:
+	switch {
+	case m.chatCopyMode:
+		footer = s.Footer("j/k", "navigate", "y/enter", "copy", "esc", "cancel")
+	case m.chatState == ChatStateReview:
 		footer = s.Footer("a", "accept", "r", "refine", "n", "skip")
+	case m.chatState == ChatStateLoading || m.chatStreaming:
+		footer = s.Footer("esc", "interrupt")
 	default:
-		footer = s.Footer("enter", "send", "ctrl+s", "save", "@", "file ref", "alt+,/.", "model", "ctrl+n", "new", "esc", "menu")
+		footer = s.Footer("enter", "send", "ctrl+y", "copy msg", "@", "file ref", "alt+,/.", "model", "ctrl+n", "new", "esc", "menu")
 	}
 	status := m.renderStatus()
 

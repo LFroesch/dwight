@@ -3,6 +3,7 @@ package ollama
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -150,7 +151,8 @@ func PullModel(modelName string) error {
 }
 
 // Chat sends a non-streaming chat request and returns the full response.
-func Chat(req ChatRequest) (*ChatResponse, error) {
+// Pass a context to support cancellation.
+func Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	startTime := time.Now()
 	timeout := req.Timeout
 	if timeout == 0 {
@@ -171,7 +173,12 @@ func Chat(req ChatRequest) (*ChatResponse, error) {
 	}
 	jsonData, _ := json.Marshal(body)
 
-	resp, err := client.Post(GetURL()+"/api/chat", "application/json", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, GetURL()+"/api/chat", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %v", err)
 	}
@@ -206,7 +213,8 @@ func Chat(req ChatRequest) (*ChatResponse, error) {
 }
 
 // ChatStream sends a streaming chat request and returns chunks via channel.
-func ChatStream(req ChatRequest) (<-chan StreamChunk, error) {
+// Pass a context to support cancellation — closing the context stops the stream.
+func ChatStream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error) {
 	timeout := req.Timeout
 	if timeout == 0 {
 		timeout = 180 * time.Second
@@ -226,7 +234,12 @@ func ChatStream(req ChatRequest) (<-chan StreamChunk, error) {
 	}
 	jsonData, _ := json.Marshal(body)
 
-	resp, err := client.Post(GetURL()+"/api/chat", "application/json", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, GetURL()+"/api/chat", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"dwight/internal/storage"
 
@@ -57,11 +58,12 @@ func main() {
 			{Name: "Quit", Desc: "Exit Dwight"},
 		},
 
-		chatState:    ChatStateInit,
-		chatMessages: []ChatMessage{},
-		chatTextArea: ta,
-		chatSpinner:  sp,
-		chatMaxLines: 14,
+		chatState:        ChatStateInit,
+		chatMessages:     []ChatMessage{},
+		chatTextArea:     ta,
+		chatSpinner:      sp,
+		chatMaxLines:     14,
+		chatStreamBuffer: &strings.Builder{},
 
 		editingProfile: -1,
 	}

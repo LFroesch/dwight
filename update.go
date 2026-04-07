@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -110,7 +111,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case streamStartedMsg:
+		m.chatStreamCh = msg.ch
+		m.chatStreaming = true
+		m.chatState = ChatStateLoading
+		return m, listenForChunk(msg.ch)
+
 	case StreamChunkMsg:
+		if !m.chatStreaming {
+			return m, nil
+		}
 		if msg.Err != nil {
 			m.chatErr = msg.Err
 			m.chatState = ChatStateError
@@ -144,7 +154,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.chatStreamBuffer.WriteString(msg.Content)
 		m.updateChatLines()
-		return m, nil
+		return m, listenForChunk(m.chatStreamCh)
 
 	case ClearChatMsg:
 		m.chatMessages = []ChatMessage{}
@@ -152,6 +162,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatStreaming = false
 		m.updateChatLines()
 		return m, showStatus("Chat cleared")
+
+	case InterruptMsg:
+		m.chatState = ChatStateReady
+		m.chatStreaming = false
+		m.chatStreamBuffer.Reset()
+		m.chatTextArea.Focus()
+		m.updateChatLines()
+		return m, showStatus("Interrupted")
 
 	case ModelPullMsg:
 		if msg.Err != nil {
@@ -255,8 +273,21 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Copy mode — navigate messages, yank to clipboard
+	if m.chatCopyMode {
+		return m.updateChatCopyMode(msg)
+	}
+
 	switch msg.String() {
 	case "esc":
+		// If generating, interrupt first
+		if m.chatState == ChatStateLoading || m.chatStreaming {
+			if m.cancelChat != nil {
+				m.cancelChat()
+				m.cancelChat = nil
+			}
+			return m, func() tea.Msg { return InterruptMsg{} }
+		}
 		// Save and exit to menu
 		if len(m.chatMessages) > 0 {
 			m.saveCurrentChat()
@@ -300,6 +331,14 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatStreamBuffer.Reset()
 			m.updateChatLines()
 			return m, showStatus("New conversation")
+		}
+
+	case "ctrl+y":
+		if len(m.chatMessages) > 0 {
+			m.chatCopyMode = true
+			m.chatCopyIdx = len(m.chatMessages) - 1
+			m.updateChatLines()
+			return m, nil
 		}
 
 	case "alt+.":
@@ -442,6 +481,37 @@ func (m model) updateAtComplete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			lastAt := strings.LastIndex(val, "@")
 			if lastAt >= 0 {
 				m.chatTextArea.SetValue(val[:lastAt] + "@" + m.atCompleteFilter)
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateChatCopyMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.chatCopyMode = false
+		m.updateChatLines()
+		return m, nil
+	case "up", "k":
+		if m.chatCopyIdx > 0 {
+			m.chatCopyIdx--
+			m.updateChatLines()
+		}
+	case "down", "j":
+		if m.chatCopyIdx < len(m.chatMessages)-1 {
+			m.chatCopyIdx++
+			m.updateChatLines()
+		}
+	case "y", "enter":
+		if m.chatCopyIdx < len(m.chatMessages) {
+			text := m.chatMessages[m.chatCopyIdx].Content
+			m.chatCopyMode = false
+			return m, func() tea.Msg {
+				if err := copyToClipboard(text); err != nil {
+					return statusMsg{message: fmt.Sprintf("Copy failed: %v", err)}
+				}
+				return statusMsg{message: "Copied to clipboard"}
 			}
 		}
 	}
@@ -906,56 +976,61 @@ func (m *model) pullModel() tea.Cmd {
 }
 
 func (m *model) sendChat(userMsg string) tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelChat = cancel
+
+	profile := m.currentProfile()
+
+	// Build messages
+	var msgs []ollama.ChatMessage
+	systemPrompt := profile.SystemPrompt
+	if m.settings.MainPrompt != "" {
+		systemPrompt = m.settings.MainPrompt + "\n\n" + systemPrompt
+	}
+
+	// Attach RAG resources to system prompt
+	if len(m.attachedResources) > 0 {
+		var rag strings.Builder
+		rag.WriteString("\n\n=== ATTACHED RESOURCES ===\n\n")
+		for _, path := range m.attachedResources {
+			if data, err := readFileContent(path); err == nil {
+				fmt.Fprintf(&rag, "--- %s ---\n%s\n\n", filepath.Base(path), data)
+			}
+		}
+		rag.WriteString("=== END RESOURCES ===\nUse these for context.")
+		systemPrompt += rag.String()
+	}
+
+	if systemPrompt != "" {
+		msgs = append(msgs, ollama.ChatMessage{Role: "system", Content: systemPrompt})
+	}
+	baseDir := m.currentDir
+	for _, msg := range m.chatMessages[:len(m.chatMessages)-1] {
+		if msg.Role == "user" || msg.Role == "assistant" {
+			content := msg.Content
+			if msg.Role == "user" {
+				content = resolveAtReferences(content, baseDir)
+			}
+			msgs = append(msgs, ollama.ChatMessage{Role: msg.Role, Content: content})
+		}
+	}
+	msgs = append(msgs, ollama.ChatMessage{Role: "user", Content: resolveAtReferences(userMsg, baseDir)})
+
+	req := ollama.ChatRequest{
+		Model: profile.Model, Messages: msgs,
+		Temperature: profile.Temperature,
+		Timeout:     time.Duration(m.settings.ChatTimeout) * time.Second,
+	}
+
 	return func() tea.Msg {
-		profile := m.currentProfile()
-
-		// Build messages
-		var msgs []ollama.ChatMessage
-		systemPrompt := profile.SystemPrompt
-		if m.settings.MainPrompt != "" {
-			systemPrompt = m.settings.MainPrompt + "\n\n" + systemPrompt
-		}
-
-		// Attach RAG resources to system prompt
-		if len(m.attachedResources) > 0 {
-			var rag strings.Builder
-			rag.WriteString("\n\n=== ATTACHED RESOURCES ===\n\n")
-			for _, path := range m.attachedResources {
-				if data, err := readFileContent(path); err == nil {
-					fmt.Fprintf(&rag, "--- %s ---\n%s\n\n", filepath.Base(path), data)
-				}
-			}
-			rag.WriteString("=== END RESOURCES ===\nUse these for context.")
-			systemPrompt += rag.String()
-		}
-
-		if systemPrompt != "" {
-			msgs = append(msgs, ollama.ChatMessage{Role: "system", Content: systemPrompt})
-		}
-		baseDir := m.currentDir
-		for _, m := range m.chatMessages[:len(m.chatMessages)-1] { // Exclude last (just added user msg)
-			if m.Role == "user" || m.Role == "assistant" {
-				content := m.Content
-				if m.Role == "user" {
-					content = resolveAtReferences(content, baseDir)
-				}
-				msgs = append(msgs, ollama.ChatMessage{Role: m.Role, Content: content})
-			}
-		}
-		msgs = append(msgs, ollama.ChatMessage{Role: "user", Content: resolveAtReferences(userMsg, baseDir)})
-
-		resp, err := ollama.Chat(ollama.ChatRequest{
-			Model: profile.Model, Messages: msgs,
-			Temperature: profile.Temperature,
-			Timeout:     time.Duration(m.settings.ChatTimeout) * time.Second,
-		})
+		ch, err := ollama.ChatStream(ctx, req)
 		if err != nil {
+			if ctx.Err() != nil {
+				return InterruptMsg{}
+			}
 			return ResponseMsg{Err: err}
 		}
-		return ResponseMsg{
-			Content: resp.Content, Duration: resp.Duration,
-			PromptTokens: resp.PromptTokens, TotalTokens: resp.TotalTokens,
-		}
+		return streamStartedMsg{ch: ch}
 	}
 }
 
@@ -975,5 +1050,22 @@ func refreshInstalledModels() tea.Cmd {
 			return statusMsg{message: fmt.Sprintf("Failed to refresh: %v", err)}
 		}
 		return installedModelsMsg{models: models}
+	}
+}
+
+func listenForChunk(ch <-chan ollama.StreamChunk) tea.Cmd {
+	return func() tea.Msg {
+		chunk, ok := <-ch
+		if !ok {
+			return StreamChunkMsg{Done: true}
+		}
+		return StreamChunkMsg{
+			Content:      chunk.Content,
+			Done:         chunk.Done,
+			Err:          chunk.Err,
+			Duration:     chunk.Duration,
+			PromptTokens: chunk.PromptTokens,
+			TotalTokens:  chunk.TotalTokens,
+		}
 	}
 }
