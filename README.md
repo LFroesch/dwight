@@ -15,7 +15,7 @@ Requires [Ollama](https://ollama.ai) running locally or on a remote host.
 
 ```bash
 dwight                                       # connect to localhost:11434
-OLLAMA_HOST=172.24.192.1:11434 dwight        # connect to remote host
+OLLAMA_HOST=xxx.xx.xx.x:11434 dwight        # connect to remote host
 ```
 
 ## Features
