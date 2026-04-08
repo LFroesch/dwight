@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"dwight/internal/storage"
 
@@ -63,7 +62,7 @@ func main() {
 		chatTextArea:     ta,
 		chatSpinner:      sp,
 		chatMaxLines:     14,
-		chatStreamBuffer: &strings.Builder{},
+
 
 		editingProfile: -1,
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"dwight/internal/ollama"
@@ -158,7 +157,7 @@ type model struct {
 	chatScrollPos    int
 	chatMaxLines     int
 	chatStreaming     bool
-	chatStreamBuffer *strings.Builder
+	chatStreamBuffer string
 	chatStreamCh     <-chan ollama.StreamChunk
 	cancelChat       context.CancelFunc // cancels in-flight generation
 

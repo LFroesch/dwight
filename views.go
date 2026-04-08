@@ -15,6 +15,9 @@ import (
 )
 
 func (m model) View() string {
+	if m.showHelp {
+		return m.renderHelp()
+	}
 	var content string
 	switch m.viewMode {
 	case ViewMenu:
@@ -661,4 +664,38 @@ func formatSize(size int64) string {
 		return fmt.Sprintf("%.1fKB", float64(size)/1024)
 	}
 	return fmt.Sprintf("%.1fMB", float64(size)/(1024*1024))
+}
+
+func (m model) renderHelp() string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(s.Purple).
+		Padding(1, 2).
+		Width(min(60, m.width-4))
+
+	keys := []struct{ key, desc string }{
+		{"j/k, ↑/↓", "Navigate"},
+		{"enter", "Select / send message"},
+		{"n", "New conversation"},
+		{"e", "Edit / export"},
+		{"d", "Delete"},
+		{"esc", "Back"},
+		{"q", "Quit"},
+		{"?", "Toggle this help"},
+		{"ctrl+c", "Quit immediately"},
+	}
+
+	var lines []string
+	lines = append(lines, s.Title.Render("dwight — Help"))
+	lines = append(lines, "")
+	for _, k := range keys {
+		lines = append(lines, fmt.Sprintf("  %s  %s",
+			s.KeyStyle.Render(fmt.Sprintf("%-16s", k.key)), k.desc))
+	}
+	lines = append(lines, "")
+	lines = append(lines, s.Dim.Render("Press ?, q, or esc to close"))
+
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		box.Render(strings.Join(lines, "\n")))
 }

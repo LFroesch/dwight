@@ -62,10 +62,10 @@ func (m *model) updateChatLines() {
 	}
 
 	// Streaming content — use fallback renderer (glamour is expensive mid-stream)
-	if m.chatStreaming && m.chatStreamBuffer.Len() > 0 {
+	if m.chatStreaming && m.chatStreamBuffer != "" {
 		header := s.AssistantMsg.Render("Assistant:")
 		m.chatLines = append(m.chatLines, header)
-		formatted := formatMarkdownFallback(m.chatStreamBuffer.String())
+		formatted := formatMarkdownFallback(m.chatStreamBuffer)
 		for _, line := range wrapText(formatted, contentWidth) {
 			m.chatLines = append(m.chatLines, "  "+line)
 		}

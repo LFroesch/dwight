@@ -43,6 +43,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		if msg.String() == "?" {
+			m.showHelp = !m.showHelp
+			return m, nil
+		}
+		if m.showHelp {
+			if msg.String() == "q" || msg.String() == "esc" {
+				m.showHelp = false
+			}
+			return m, nil
+		}
 		switch m.viewMode {
 		case ViewMenu:
 			return m.updateMenu(msg)
@@ -125,17 +135,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatErr = msg.Err
 			m.chatState = ChatStateError
 			m.chatStreaming = false
-			m.chatStreamBuffer.Reset()
+			m.chatStreamBuffer = ""
 			m.updateChatLines()
 			return m, nil
 		}
 		if msg.Done {
-			if m.chatStreamBuffer.Len() > 0 {
+			if m.chatStreamBuffer != "" {
 				m.chatMessages = append(m.chatMessages, ChatMessage{
-					Role: "assistant", Content: m.chatStreamBuffer.String(),
+					Role: "assistant", Content: m.chatStreamBuffer,
 					Duration: msg.Duration, PromptTokens: msg.PromptTokens, TotalTokens: msg.TotalTokens,
 				})
-				m.chatStreamBuffer.Reset()
+				m.chatStreamBuffer = ""
 			}
 			// Check for code blocks — enter review mode if found
 			content := m.chatMessages[len(m.chatMessages)-1].Content
@@ -152,13 +162,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateChatLines()
 			return m, nil
 		}
-		m.chatStreamBuffer.WriteString(msg.Content)
+		m.chatStreamBuffer += msg.Content
 		m.updateChatLines()
 		return m, listenForChunk(m.chatStreamCh)
 
 	case ClearChatMsg:
 		m.chatMessages = []ChatMessage{}
-		m.chatStreamBuffer.Reset()
+		m.chatStreamBuffer = ""
 		m.chatStreaming = false
 		m.updateChatLines()
 		return m, showStatus("Chat cleared")
@@ -166,7 +176,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case InterruptMsg:
 		m.chatState = ChatStateReady
 		m.chatStreaming = false
-		m.chatStreamBuffer.Reset()
+		m.chatStreamBuffer = ""
 		m.chatTextArea.Focus()
 		m.updateChatLines()
 		return m, showStatus("Interrupted")
@@ -211,7 +221,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatState = ChatStateCheckingModel
 			m.chatTextArea.Focus()
 			m.chatMessages = []ChatMessage{}
-			m.chatStreamBuffer.Reset()
+			m.chatStreamBuffer = ""
 			m.chatStreaming = false
 			m.updateChatLines()
 			return m, tea.Batch(m.checkModel(), m.chatSpinner.Tick)
@@ -296,7 +306,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.chatTextArea.Blur()
 		m.chatMessages = []ChatMessage{}
 		m.chatState = ChatStateInit
-		m.chatStreamBuffer.Reset()
+		m.chatStreamBuffer = ""
 		m.chatStreaming = false
 		return m, nil
 
@@ -328,7 +338,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatMessages = []ChatMessage{}
 			m.currentConversation = nil
 			m.attachedResources = nil
-			m.chatStreamBuffer.Reset()
+			m.chatStreamBuffer = ""
 			m.updateChatLines()
 			return m, showStatus("New conversation")
 		}
