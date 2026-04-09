@@ -4,6 +4,8 @@ Terminal AI chat client for local Ollama models. Chat, manage conversations, att
 
 ## Quick Install
 
+Supported platforms: Linux and macOS. On Windows, use WSL.
+
 Recommended (installs to `~/.local/bin`):
 
 ```bash
