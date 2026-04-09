@@ -25,15 +25,6 @@ Command:
 ```bash
 dwight
 ```
-## Install
-
-```bash
-cd dwight
-make install
-```
-
-Requires [Ollama](https://ollama.ai) running locally or on a remote host.
-
 ## Usage
 
 ```bash
