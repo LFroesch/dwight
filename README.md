@@ -25,6 +25,7 @@ make install
 ```bash
 dwight                                       # connect to localhost:11434
 OLLAMA_HOST=xxx.xx.xx.x:11434 dwight        # connect to remote host
+DWIGHT_MODEL=llama3.2:3b dwight             # override default model
 ```
 
 ## Features
@@ -65,6 +66,13 @@ Stored in `~/.local/share/dwight/`:
 | `.dwight-models.json` | Model profiles (name, model, temperature, etc.) |
 | `settings.json` | System prompt, username, timeout |
 | `conversations/` | Saved conversation history (JSON) |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_HOST` | `localhost:11434` | Ollama API endpoint |
+| `DWIGHT_MODEL` | `qwen2.5:7b` | Default model for new profiles |
 
 ## Requirements
 

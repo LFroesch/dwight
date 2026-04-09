@@ -114,10 +114,17 @@ type ModelConfig struct {
 	CurrentProfile int            `json:"current_profile"`
 }
 
+func defaultModel() string {
+	if m := os.Getenv("DWIGHT_MODEL"); m != "" {
+		return m
+	}
+	return "qwen2.5:7b"
+}
+
 var DefaultProfiles = []ModelProfile{
-	{Name: "General Assistant", Model: "qwen2.5:3b", SystemPrompt: "You are a helpful AI assistant. Answer questions clearly and concisely.", Temperature: 0.7},
-	{Name: "Coder Assistant", Model: "qwen2.5:3b", SystemPrompt: "You are a helpful coding assistant. Provide clear, concise code examples.", Temperature: 0.5},
-	{Name: "Creative Writer", Model: "qwen2.5:3b", SystemPrompt: "You are a creative writing assistant. Be imaginative and descriptive.", Temperature: 0.9},
+	{Name: "General Assistant", Model: defaultModel(), SystemPrompt: "You are a helpful AI assistant. Answer questions clearly and concisely.", Temperature: 0.7},
+	{Name: "Coder Assistant", Model: defaultModel(), SystemPrompt: "You are a helpful coding assistant. Provide clear, concise code examples.", Temperature: 0.5},
+	{Name: "Creative Writer", Model: defaultModel(), SystemPrompt: "You are a creative writing assistant. Be imaginative and descriptive.", Temperature: 0.9},
 }
 
 func LoadModelConfig() ModelConfig {
