@@ -20,11 +20,6 @@ Or build from source:
 make install
 ```
 
-Command:
-
-```bash
-dwight
-```
 ## Usage
 
 ```bash
