@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"dwight/internal/ollama"
-	s "dwight/internal/styles"
 	"dwight/internal/storage"
+	s "dwight/internal/styles"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -133,11 +133,12 @@ func (m model) viewChat() string {
 	profile := m.currentProfile()
 
 	// Header: model name + context bar + stats
-	header := s.Title.Render("dwight") + s.Dim.Render(" | ") + s.Success.Render(profile.Model)
+	header := s.Title.Render("dwight") + s.Dim.Render(" | ") + s.Success.Render(profile.Model) + s.Dim.Render(" | ") + s.Title.Render(profile.Name)
 
+	// Use the last message's TotalTokens — Ollama reports cumulative session tokens per call.
 	totalTokens := 0
-	for _, msg := range m.chatMessages {
-		totalTokens += msg.TotalTokens
+	if len(m.chatMessages) > 0 {
+		totalTokens = m.chatMessages[len(m.chatMessages)-1].TotalTokens
 	}
 	ctxSize := ollama.ContextWindowSize(profile.Model)
 
@@ -369,6 +370,11 @@ func (m model) viewModelPull() string {
 
 func (m model) viewModelLibrary() string {
 	title := s.Title.Render("Ollama Model Library")
+	if m.libraryFilter != "" {
+		title += s.Dim.Render("  filter: ") + s.Success.Render(m.libraryFilter)
+	} else {
+		title += s.Dim.Render("  (type to filter)")
+	}
 
 	var content strings.Builder
 	models := m.getFilteredLibrary()
@@ -418,7 +424,7 @@ func (m model) viewModelLibrary() string {
 		}
 	}
 
-	footer := s.Footer("j/k", "navigate", "enter", "install", "r", "refresh", "esc", "back")
+	footer := s.Footer("j/k", "navigate", "enter", "install", "type", "filter", "backspace", "clear filter", "r", "refresh", "esc", "back")
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
 }
 

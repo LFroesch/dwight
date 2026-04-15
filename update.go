@@ -290,13 +290,18 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "esc":
-		// If generating, interrupt first
+		// If generating, cancel and clean up immediately so late StreamChunkMsgs are ignored.
 		if m.chatState == ChatStateLoading || m.chatStreaming {
 			if m.cancelChat != nil {
 				m.cancelChat()
 				m.cancelChat = nil
 			}
-			return m, func() tea.Msg { return InterruptMsg{} }
+			m.chatState = ChatStateReady
+			m.chatStreaming = false
+			m.chatStreamBuffer = ""
+			m.chatTextArea.Focus()
+			m.updateChatLines()
+			return m, showStatus("Interrupted")
 		}
 		// Save and exit to menu
 		if len(m.chatMessages) > 0 {
@@ -355,16 +360,18 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile + 1) % len(m.modelConfig.Profiles)
 			storage.SaveModelConfig(m.modelConfig)
+			m.chatState = ChatStateCheckingModel
 			m.updateChatLines()
-			return m, showStatus(fmt.Sprintf("Switched to %s", m.currentProfile().Name))
+			return m, tea.Batch(m.checkModel(), m.chatSpinner.Tick)
 		}
 
 	case "alt+,":
 		if m.chatState == ChatStateReady && !m.chatStreaming {
 			m.modelConfig.CurrentProfile = (m.modelConfig.CurrentProfile - 1 + len(m.modelConfig.Profiles)) % len(m.modelConfig.Profiles)
 			storage.SaveModelConfig(m.modelConfig)
+			m.chatState = ChatStateCheckingModel
 			m.updateChatLines()
-			return m, showStatus(fmt.Sprintf("Switched to %s", m.currentProfile().Name))
+			return m, tea.Batch(m.checkModel(), m.chatSpinner.Tick)
 		}
 
 	case "y", "Y":
@@ -809,6 +816,11 @@ func (m model) updateModelLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.librarySelection < maxSel {
 			m.librarySelection++
 		}
+	case "backspace":
+		if len(m.libraryFilter) > 0 {
+			m.libraryFilter = m.libraryFilter[:len(m.libraryFilter)-1]
+			m.librarySelection = 0
+		}
 	case "r":
 		return m, refreshInstalledModels()
 	case "enter":
@@ -823,6 +835,12 @@ func (m model) updateModelLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.modelPullStatus = fmt.Sprintf("Installing %s...", name)
 			m.modelPullError = nil
 			return m, pullOllamaModel(name)
+		}
+	default:
+		key := msg.String()
+		if len(key) == 1 {
+			m.libraryFilter += key
+			m.librarySelection = 0
 		}
 	}
 	return m, nil

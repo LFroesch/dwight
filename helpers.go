@@ -28,6 +28,13 @@ func (m *model) updateChatLines() {
 		contentWidth = 20
 	}
 
+	// Remember whether user was at the bottom before rebuilding lines.
+	oldMax := len(m.chatLines) - m.chatMaxLines
+	if oldMax < 0 {
+		oldMax = 0
+	}
+	wasAtBottom := len(m.chatLines) == 0 || m.chatScrollPos >= oldMax
+
 	m.chatLines = nil
 
 	if len(m.chatMessages) == 0 && !m.chatStreaming {
@@ -40,6 +47,7 @@ func (m *model) updateChatLines() {
 			s.Dim.Render(fmt.Sprintf("  Model: %s", profile.Model)),
 			"",
 		)
+		_ = wasAtBottom
 		m.chatScrollPos = 0
 		return
 	}
@@ -72,11 +80,15 @@ func (m *model) updateChatLines() {
 		m.chatLines = append(m.chatLines, "")
 	}
 
-	// Auto-scroll to bottom
-	if len(m.chatLines) > m.chatMaxLines {
-		m.chatScrollPos = len(m.chatLines) - m.chatMaxLines
-	} else {
-		m.chatScrollPos = 0
+	// Auto-scroll to bottom only if user was already there (preserves manual scroll during streaming).
+	newMax := len(m.chatLines) - m.chatMaxLines
+	if newMax < 0 {
+		newMax = 0
+	}
+	if wasAtBottom {
+		m.chatScrollPos = newMax
+	} else if m.chatScrollPos > newMax {
+		m.chatScrollPos = newMax
 	}
 }
 
