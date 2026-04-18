@@ -1,4 +1,13 @@
 ## DevLog
+### 2026-04-18: Chat clear/close semantics, safer history restore, direct export
+- `ctrl+c` is now chat-local: clears the current draft first, closes chat only when the composer is already empty, and interrupts generation while streaming
+- Fixed conversation state leakage when opening a fresh chat after loading history or after clearing chat; old conversations no longer stay bound and get overwritten by mistake
+- Added direct in-chat markdown export via `ctrl+o`
+- Conversation exports now live under `~/.local/share/dwight/exports/<project>/<day>/` with cleaner timestamped filenames, and markdown exports include conversation/update timestamps plus per-message timestamps
+- History/export views now show export status toasts, and conversation project labels prefer the local repo/folder name over raw remote URLs
+- Copy mode now supports multi-select (`space` to mark), redraws cleanly after copy, and supports macOS clipboard via `pbcopy`
+- Files touched: `update.go`, `helpers.go`, `views.go`, `internal/storage/storage.go`, `README.md`, `WORK.md`
+
 ### 2026-04-04: Interrupt, token/speed stats, copy messages
 - `esc` during loading cancels in-flight HTTP request via `context.WithCancel`; `InterruptMsg` cleans state
 - ollama.Chat/ChatStream now take `context.Context` — cancellation propagates through HTTP layer

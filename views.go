@@ -224,13 +224,13 @@ func (m model) viewChat() string {
 	var footer string
 	switch {
 	case m.chatCopyMode:
-		footer = s.Footer("j/k", "navigate", "y/enter", "copy", "esc", "cancel")
+		footer = s.Footer("j/k", "navigate", "space", "mark", "y/enter", "copy", "esc", "cancel")
 	case m.chatState == ChatStateReview:
 		footer = s.Footer("a", "accept", "r", "refine", "n", "skip")
 	case m.chatState == ChatStateLoading || m.chatStreaming:
-		footer = s.Footer("esc", "interrupt")
+		footer = s.Footer("esc", "interrupt", "ctrl+c", "interrupt")
 	default:
-		footer = s.Footer("enter", "send", "ctrl+y", "copy msg", "@", "file ref", "alt+,/.", "model", "ctrl+n", "new", "esc", "menu")
+		footer = s.Footer("enter", "send", "ctrl+c", "clear/close", "ctrl+y", "copy msg", "ctrl+o", "export md", "alt+,/.", "model", "ctrl+n", "new")
 	}
 	status := m.renderStatus()
 
@@ -251,6 +251,7 @@ func (m model) viewChat() string {
 
 func (m model) viewConversationList() string {
 	title := s.Title.Render("Conversation History")
+	status := m.renderStatus()
 
 	var content strings.Builder
 	if len(m.conversations) == 0 {
@@ -281,7 +282,12 @@ func (m model) viewConversationList() string {
 	}
 
 	footer := s.Footer("j/k", "navigate", "enter", "load", "d", "delete", "e", "export", "esc", "back")
-	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
+	parts := []string{title, "", content.String()}
+	if status != "" {
+		parts = append(parts, "", status)
+	}
+	parts = append(parts, "", footer)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m model) viewConversationExport() string {
@@ -292,7 +298,13 @@ func (m model) viewConversationExport() string {
 	title := s.Title.Render(fmt.Sprintf("Export: %s", conv.Title))
 	options := s.Normal.Render("1. Markdown (.md)\n2. JSON (.json)")
 	footer := s.Footer("1-2", "export", "esc", "back")
-	return lipgloss.JoinVertical(lipgloss.Left, title, "", options, "", footer)
+	status := m.renderStatus()
+	parts := []string{title, "", options}
+	if status != "" {
+		parts = append(parts, "", status)
+	}
+	parts = append(parts, "", footer)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // =============================================================================
@@ -688,7 +700,7 @@ func (m model) renderHelp() string {
 		{"esc", "Back"},
 		{"q", "Quit"},
 		{"?", "Toggle this help"},
-		{"ctrl+c", "Quit immediately"},
+		{"ctrl+c", "In chat: clear draft, then close"},
 	}
 
 	var lines []string

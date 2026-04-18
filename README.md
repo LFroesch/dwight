@@ -30,9 +30,10 @@ DWIGHT_MODEL=llama3.2:3b dwight             # override default model
 
 ## Features
 
-- **Chat** — Multi-line input, markdown rendering, token tracking
+- **Chat** — Multi-line input, markdown rendering, token tracking, and multi-message copy mode
+- **Draft Controls** — `ctrl+c` clears the current draft, then closes chat when the input is already empty
 - **Model Profiles** — Switch between saved model configurations (Alt+,/.)
-- **Conversations** — Save, load, resume, export to Markdown/JSON
+- **Conversations** — Save, load, resume, and export to Markdown/JSON with timestamps, project/day export folders, and inline status feedback
 - **RAG** — Attach local files as context for the current chat (Ctrl+R)
 - **Model Library** — Browse available Ollama models, pull new ones
 
@@ -49,10 +50,13 @@ DWIGHT_MODEL=llama3.2:3b dwight             # override default model
 | Key | Action |
 |-----|--------|
 | `enter` | Send message |
+| `ctrl+c` | Clear draft, or close chat if draft is empty |
+| `ctrl+o` | Export current chat to Markdown |
 | `ctrl+l` | Clear chat |
 | `ctrl+s` | Save conversation |
 | `ctrl+n` | New conversation |
 | `ctrl+r` | Attach file (RAG) |
+| `ctrl+y` | Copy mode (`space` mark, `y` copy selected/current) |
 | `alt+,` / `alt+.` | Switch model profile |
 | `esc` | Back to menu |
 
@@ -66,6 +70,7 @@ Stored in `~/.local/share/dwight/`:
 | `.dwight-models.json` | Model profiles (name, model, temperature, etc.) |
 | `settings.json` | System prompt, username, timeout |
 | `conversations/` | Saved conversation history (JSON) |
+| `exports/` | Exports grouped by project and day, e.g. `exports/<project>/YYYY-MM-DD/04-18-26_3-12-pm.md` |
 
 ## Environment Variables
 

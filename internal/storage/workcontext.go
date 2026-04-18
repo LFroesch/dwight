@@ -68,14 +68,25 @@ func shortenGitRemote(raw string) string {
 
 // ContextLabel returns a short string for lists: origin, repo folder name, or working dir.
 func ContextLabel(wc WorkContext) string {
-	if wc.OriginHint != "" {
-		return wc.OriginHint
-	}
 	if wc.GitRoot != "" {
 		return filepath.Base(wc.GitRoot)
 	}
+	if wc.OriginHint != "" {
+		return repoNameFromOrigin(wc.OriginHint)
+	}
 	if wc.WorkingDir != "" {
-		return wc.WorkingDir
+		return filepath.Base(wc.WorkingDir)
 	}
 	return ""
+}
+
+func repoNameFromOrigin(origin string) string {
+	origin = strings.TrimSuffix(origin, "/")
+	if origin == "" {
+		return ""
+	}
+	if i := strings.LastIndex(origin, "/"); i >= 0 && i < len(origin)-1 {
+		return origin[i+1:]
+	}
+	return origin
 }

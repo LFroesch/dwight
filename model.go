@@ -137,11 +137,11 @@ type model struct {
 	statusExp time.Time
 
 	// Config & storage (loaded once)
-	config       storage.Config
-	settings     storage.Settings
-	modelConfig  storage.ModelConfig
-	currentDir   string
-	workContext  storage.WorkContext // cwd + git tagging for new conversations
+	config      storage.Config
+	settings    storage.Settings
+	modelConfig storage.ModelConfig
+	currentDir  string
+	workContext storage.WorkContext // cwd + git tagging for new conversations
 
 	// Menu
 	menuCursor int
@@ -156,14 +156,15 @@ type model struct {
 	chatLines        []string
 	chatScrollPos    int
 	chatMaxLines     int
-	chatStreaming     bool
+	chatStreaming    bool
 	chatStreamBuffer string
 	chatStreamCh     <-chan ollama.StreamChunk
 	cancelChat       context.CancelFunc // cancels in-flight generation
 
 	// Copy mode — navigate messages, yank to clipboard
-	chatCopyMode bool
-	chatCopyIdx  int // index into chatMessages (-1 = last)
+	chatCopyMode     bool
+	chatCopyIdx      int // index into chatMessages (-1 = last)
+	chatCopySelected map[int]bool
 
 	// Conversation management
 	currentConversation *storage.Conversation
@@ -196,12 +197,12 @@ type model struct {
 	exportFormat string
 
 	// @ autocomplete
-	showAtComplete    bool
-	atCompleteFiles   []string // filtered results
-	atCompleteCursor  int
-	atCompleteFilter  string
-	fileCache         []string // cached project files
-	fileCacheDir      string   // dir the cache was built for
+	showAtComplete   bool
+	atCompleteFiles  []string // filtered results
+	atCompleteCursor int
+	atCompleteFilter string
+	fileCache        []string // cached project files
+	fileCacheDir     string   // dir the cache was built for
 
 	// Code block review (accept/refine/reject)
 	codeBlocks  []CodeBlock

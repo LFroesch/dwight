@@ -41,6 +41,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			if m.viewMode == ViewChat {
+				return m.updateChat(msg)
+			}
 			return m, tea.Quit
 		}
 		if msg.String() == "?" {
@@ -167,9 +170,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenForChunk(m.chatStreamCh)
 
 	case ClearChatMsg:
-		m.chatMessages = []ChatMessage{}
-		m.chatStreamBuffer = ""
-		m.chatStreaming = false
+		m.resetChatSession()
+		m.chatState = ChatStateReady
+		m.chatTextArea.Focus()
 		m.updateChatLines()
 		return m, showStatus("Chat cleared")
 
@@ -218,11 +221,9 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch m.menuCursor {
 		case 0: // Chat
 			m.viewMode = ViewChat
+			m.resetChatSession()
 			m.chatState = ChatStateCheckingModel
 			m.chatTextArea.Focus()
-			m.chatMessages = []ChatMessage{}
-			m.chatStreamBuffer = ""
-			m.chatStreaming = false
 			m.updateChatLines()
 			return m, tea.Batch(m.checkModel(), m.chatSpinner.Tick)
 		case 1: // Conversations
@@ -289,6 +290,35 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
+	case "ctrl+c":
+		if m.chatState == ChatStateLoading || m.chatStreaming {
+			if m.cancelChat != nil {
+				m.cancelChat()
+				m.cancelChat = nil
+			}
+			m.chatState = ChatStateReady
+			m.chatStreaming = false
+			m.chatStreamBuffer = ""
+			m.chatTextArea.Focus()
+			m.updateChatLines()
+			return m, showStatus("Interrupted")
+		}
+		if strings.TrimSpace(m.chatTextArea.Value()) != "" {
+			m.chatTextArea.Reset()
+			m.showAtComplete = false
+			m.atCompleteFiles = nil
+			m.atCompleteCursor = 0
+			m.atCompleteFilter = ""
+			return m, showStatus("Draft cleared")
+		}
+		if len(m.chatMessages) > 0 {
+			m.saveCurrentChat()
+		}
+		m.viewMode = ViewMenu
+		m.chatTextArea.Blur()
+		m.resetChatSession()
+		return m, showStatus("Closed chat")
+
 	case "esc":
 		// If generating, cancel and clean up immediately so late StreamChunkMsgs are ignored.
 		if m.chatState == ChatStateLoading || m.chatStreaming {
@@ -309,10 +339,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.viewMode = ViewMenu
 		m.chatTextArea.Blur()
-		m.chatMessages = []ChatMessage{}
-		m.chatState = ChatStateInit
-		m.chatStreamBuffer = ""
-		m.chatStreaming = false
+		m.resetChatSession()
 		return m, nil
 
 	case "ctrl+l":
@@ -340,10 +367,9 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(m.chatMessages) > 0 {
 				m.saveCurrentChat()
 			}
-			m.chatMessages = []ChatMessage{}
-			m.currentConversation = nil
-			m.attachedResources = nil
-			m.chatStreamBuffer = ""
+			m.resetChatSession()
+			m.chatState = ChatStateReady
+			m.chatTextArea.Focus()
 			m.updateChatLines()
 			return m, showStatus("New conversation")
 		}
@@ -352,8 +378,14 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.chatMessages) > 0 {
 			m.chatCopyMode = true
 			m.chatCopyIdx = len(m.chatMessages) - 1
+			m.chatCopySelected = make(map[int]bool)
 			m.updateChatLines()
 			return m, nil
+		}
+
+	case "ctrl+o":
+		if len(m.chatMessages) > 0 {
+			return m, m.exportActiveConversation("markdown")
 		}
 
 	case "alt+.":
@@ -508,6 +540,7 @@ func (m model) updateChatCopyMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q":
 		m.chatCopyMode = false
+		m.chatCopySelected = nil
 		m.updateChatLines()
 		return m, nil
 	case "up", "k":
@@ -520,15 +553,33 @@ func (m model) updateChatCopyMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.chatCopyIdx++
 			m.updateChatLines()
 		}
+	case " ":
+		if m.chatCopyIdx >= 0 && m.chatCopyIdx < len(m.chatMessages) {
+			if m.chatCopySelected == nil {
+				m.chatCopySelected = make(map[int]bool)
+			}
+			if m.chatCopySelected[m.chatCopyIdx] {
+				delete(m.chatCopySelected, m.chatCopyIdx)
+			} else {
+				m.chatCopySelected[m.chatCopyIdx] = true
+			}
+			m.updateChatLines()
+		}
 	case "y", "enter":
-		if m.chatCopyIdx < len(m.chatMessages) {
-			text := m.chatMessages[m.chatCopyIdx].Content
+		texts := m.selectedCopyTexts()
+		if len(texts) > 0 {
 			m.chatCopyMode = false
+			m.chatCopySelected = nil
+			m.updateChatLines()
+			text := strings.Join(texts, "\n\n---\n\n")
 			return m, func() tea.Msg {
 				if err := copyToClipboard(text); err != nil {
 					return statusMsg{message: fmt.Sprintf("Copy failed: %v", err)}
 				}
-				return statusMsg{message: "Copied to clipboard"}
+				if len(texts) == 1 {
+					return statusMsg{message: "Copied to clipboard"}
+				}
+				return statusMsg{message: fmt.Sprintf("Copied %d messages to clipboard", len(texts))}
 			}
 		}
 	}
@@ -598,12 +649,8 @@ func (m model) updateConversationList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			conv := m.conversations[m.selectedConv]
 			loaded, err := storage.LoadConversation(conv.ID)
 			if err == nil {
-				m.currentConversation = loaded
-				m.chatMessages = convMessagesToChat(loaded.Messages)
 				m.viewMode = ViewChat
-				m.chatState = ChatStateReady
-				m.chatTextArea.Focus()
-				m.updateChatLines()
+				m.prepareLoadedConversation(loaded)
 				return m, showStatus(fmt.Sprintf("Loaded: %s", conv.Title))
 			}
 			return m, showStatus(fmt.Sprintf("Failed: %v", err))

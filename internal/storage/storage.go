@@ -209,6 +209,44 @@ func ConversationsDir() string {
 	return filepath.Join(DataDir(), "conversations")
 }
 
+// ExportsDir is ~/.local/share/dwight/exports.
+func ExportsDir() string {
+	return filepath.Join(DataDir(), "exports")
+}
+
+// ExportProjectName returns a filesystem-safe project bucket for exports.
+func ExportProjectName(wc WorkContext) string {
+	label := ContextLabel(wc)
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = "misc"
+	}
+
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(label) {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			prevDash = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			prevDash = false
+		case r == ' ' || r == '-' || r == '_' || r == '.':
+			if b.Len() > 0 && !prevDash {
+				b.WriteRune('-')
+				prevDash = true
+			}
+		}
+	}
+
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "misc"
+	}
+	return out
+}
+
 func SaveConversation(conv *Conversation) error {
 	dir := ConversationsDir()
 	os.MkdirAll(dir, 0755)
@@ -279,7 +317,7 @@ func ListConversations() ([]ConversationMeta, error) {
 			ProfileName: conv.ProfileName, Created: conv.Created,
 			LastModified: conv.LastModified, MessageCount: conv.MessageCount,
 			TotalTokens: conv.TotalTokens,
-			WorkingDir: conv.WorkingDir, GitRoot: conv.GitRoot, OriginHint: conv.OriginHint,
+			WorkingDir:  conv.WorkingDir, GitRoot: conv.GitRoot, OriginHint: conv.OriginHint,
 		})
 	}
 
@@ -308,6 +346,7 @@ func ExportMarkdown(conv *Conversation) string {
 	md.WriteString(fmt.Sprintf("# %s\n\n", conv.Title))
 	md.WriteString(fmt.Sprintf("**Model:** %s (%s)  \n", conv.Model, conv.ProfileName))
 	md.WriteString(fmt.Sprintf("**Created:** %s  \n", conv.Created.Format("January 2, 2006 3:04 PM")))
+	md.WriteString(fmt.Sprintf("**Last Updated:** %s  \n", conv.LastModified.Format("January 2, 2006 3:04 PM")))
 	if label := ContextLabel(WorkContext{WorkingDir: conv.WorkingDir, GitRoot: conv.GitRoot, OriginHint: conv.OriginHint}); label != "" {
 		md.WriteString(fmt.Sprintf("**Where:** %s  \n", label))
 	}
@@ -318,9 +357,19 @@ func ExportMarkdown(conv *Conversation) string {
 			md.WriteString("## User\n\n")
 		} else {
 			md.WriteString("## Assistant\n\n")
-			if msg.Duration > 0 {
-				md.WriteString(fmt.Sprintf("*%.1fs | %d tokens*\n\n", msg.Duration.Seconds(), msg.TotalTokens))
-			}
+		}
+		var meta []string
+		if !msg.Timestamp.IsZero() {
+			meta = append(meta, msg.Timestamp.Format("2006-01-02 15:04:05"))
+		}
+		if msg.Role == "assistant" && msg.Duration > 0 {
+			meta = append(meta, fmt.Sprintf("%.1fs", msg.Duration.Seconds()))
+		}
+		if msg.Role == "assistant" && msg.TotalTokens > 0 {
+			meta = append(meta, fmt.Sprintf("%d tokens", msg.TotalTokens))
+		}
+		if len(meta) > 0 {
+			md.WriteString(fmt.Sprintf("*%s*\n\n", strings.Join(meta, " | ")))
 		}
 		md.WriteString(msg.Content + "\n\n---\n\n")
 	}

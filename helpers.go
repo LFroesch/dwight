@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"dwight/internal/ollama"
-	s "dwight/internal/styles"
 	"dwight/internal/storage"
+	s "dwight/internal/styles"
 
-	"github.com/charmbracelet/glamour"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -58,11 +58,17 @@ func (m *model) updateChatLines() {
 			msg.formattedLines = formatChatMessage(msg, contentWidth)
 			msg.lastWidth = contentWidth
 		}
-		if m.chatCopyMode && i == m.chatCopyIdx && len(msg.formattedLines) > 0 {
-			// Highlight selected message header in copy mode
+		if m.chatCopyMode && len(msg.formattedLines) > 0 {
 			highlighted := make([]string, len(msg.formattedLines))
 			copy(highlighted, msg.formattedLines)
-			highlighted[0] = s.Selected.Render("► ") + highlighted[0]
+			prefix := "  "
+			if m.chatCopySelected[i] {
+				prefix = "✓ "
+			}
+			if i == m.chatCopyIdx {
+				prefix = "►" + strings.TrimRight(prefix, " ")
+			}
+			highlighted[0] = s.Selected.Render(prefix+" ") + highlighted[0]
 			m.chatLines = append(m.chatLines, highlighted...)
 		} else {
 			m.chatLines = append(m.chatLines, msg.formattedLines...)
@@ -312,6 +318,112 @@ func (m *model) saveCurrentChat() error {
 	return storage.SaveConversation(conv)
 }
 
+func (m *model) resetChatSession() {
+	m.chatMessages = nil
+	m.currentConversation = nil
+	m.attachedResources = nil
+	m.chatStreamBuffer = ""
+	m.chatStreamCh = nil
+	m.chatStreaming = false
+	m.cancelChat = nil
+	m.chatCopyMode = false
+	m.chatCopyIdx = 0
+	m.chatCopySelected = nil
+	m.codeBlocks = nil
+	m.reviewIndex = 0
+	m.showResourcePicker = false
+	m.showAtComplete = false
+	m.atCompleteFiles = nil
+	m.atCompleteCursor = 0
+	m.atCompleteFilter = ""
+	m.chatScrollPos = 0
+	m.chatState = ChatStateInit
+	m.chatTextArea.Reset()
+}
+
+func (m *model) prepareLoadedConversation(conv *storage.Conversation) {
+	m.currentConversation = conv
+	m.chatMessages = convMessagesToChat(conv.Messages)
+	m.attachedResources = nil
+	m.chatStreamBuffer = ""
+	m.chatStreamCh = nil
+	m.chatStreaming = false
+	m.cancelChat = nil
+	m.chatCopyMode = false
+	m.chatCopyIdx = 0
+	m.chatCopySelected = nil
+	m.codeBlocks = nil
+	m.reviewIndex = 0
+	m.showResourcePicker = false
+	m.showAtComplete = false
+	m.atCompleteFiles = nil
+	m.atCompleteCursor = 0
+	m.atCompleteFilter = ""
+	m.chatState = ChatStateReady
+	m.chatTextArea.Reset()
+	m.chatTextArea.Focus()
+	m.updateChatLines()
+}
+
+func (m *model) buildConversationSnapshot() *storage.Conversation {
+	if len(m.chatMessages) == 0 {
+		return nil
+	}
+	if m.currentConversation != nil {
+		clone := *m.currentConversation
+		clone.Messages = chatToConvMessages(m.chatMessages)
+		clone.MessageCount = len(clone.Messages)
+		totalTokens, promptTokens := 0, 0
+		for _, msg := range clone.Messages {
+			totalTokens += msg.TotalTokens
+			promptTokens += msg.PromptTokens
+		}
+		clone.TotalTokens = totalTokens
+		clone.PromptTokens = promptTokens
+		return &clone
+	}
+
+	profile := m.currentProfile()
+	convMsgs := chatToConvMessages(m.chatMessages)
+	title := storage.GenerateTitle(convMsgs)
+	totalTokens, promptTokens := 0, 0
+	for _, msg := range convMsgs {
+		totalTokens += msg.TotalTokens
+		promptTokens += msg.PromptTokens
+	}
+	return &storage.Conversation{
+		ID:           storage.NewConversationSlug(title),
+		Title:        title,
+		Model:        profile.Model,
+		ProfileName:  profile.Name,
+		Created:      time.Now(),
+		LastModified: time.Now(),
+		Messages:     convMsgs,
+		MessageCount: len(convMsgs),
+		TotalTokens:  totalTokens,
+		PromptTokens: promptTokens,
+		Tags:         []string{},
+		WorkingDir:   m.workContext.WorkingDir,
+		GitRoot:      m.workContext.GitRoot,
+		OriginHint:   m.workContext.OriginHint,
+	}
+}
+
+func exportFilename(exportDir string, created time.Time, ext string) string {
+	stamp := strings.ToLower(created.Format("01-02-06_3-04-pm"))
+	return filepath.Join(exportDir, stamp+ext)
+}
+
+func exportDirForConversation(conv *storage.Conversation) string {
+	project := storage.ExportProjectName(storage.WorkContext{
+		WorkingDir: conv.WorkingDir,
+		GitRoot:    conv.GitRoot,
+		OriginHint: conv.OriginHint,
+	})
+	day := conv.Created.Format("2006-01-02")
+	return filepath.Join(storage.ExportsDir(), project, day)
+}
+
 func (m *model) exportConversation(format string) tea.Cmd {
 	return func() tea.Msg {
 		if m.selectedConv >= len(m.conversations) {
@@ -323,8 +435,10 @@ func (m *model) exportConversation(format string) tea.Cmd {
 			return statusMsg{message: fmt.Sprintf("Failed to load: %v", err)}
 		}
 
-		exportDir := filepath.Join(m.currentDir, "exports")
-		os.MkdirAll(exportDir, 0755)
+		exportDir := exportDirForConversation(loaded)
+		if err := os.MkdirAll(exportDir, 0755); err != nil {
+			return statusMsg{message: fmt.Sprintf("Failed to create export dir: %v", err)}
+		}
 
 		var content, ext string
 		switch format {
@@ -332,21 +446,76 @@ func (m *model) exportConversation(format string) tea.Cmd {
 			content = storage.ExportMarkdown(loaded)
 			ext = ".md"
 		case "json":
-			content, _ = storage.ExportJSON(loaded)
+			content, err = storage.ExportJSON(loaded)
+			if err != nil {
+				return statusMsg{message: fmt.Sprintf("Failed to export: %v", err)}
+			}
 			ext = ".json"
+		default:
+			return statusMsg{message: "Unsupported export format"}
 		}
 
-		safeTitle := strings.ReplaceAll(conv.Title, "/", "-")
-		safeTitle = strings.ReplaceAll(safeTitle, " ", "_")
-		if len(safeTitle) > 50 {
-			safeTitle = safeTitle[:50]
-		}
-		filename := filepath.Join(exportDir, safeTitle+"_"+conv.Created.Format("20060102")+ext)
+		filename := exportFilename(exportDir, loaded.Created, ext)
 		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 			return statusMsg{message: fmt.Sprintf("Failed to write: %v", err)}
 		}
 		return statusMsg{message: fmt.Sprintf("Exported to %s", filename)}
 	}
+}
+
+func (m *model) exportActiveConversation(format string) tea.Cmd {
+	return func() tea.Msg {
+		conv := m.buildConversationSnapshot()
+		if conv == nil {
+			return statusMsg{message: "No conversation to export"}
+		}
+
+		exportDir := exportDirForConversation(conv)
+		if err := os.MkdirAll(exportDir, 0755); err != nil {
+			return statusMsg{message: fmt.Sprintf("Failed to create export dir: %v", err)}
+		}
+
+		var content, ext string
+		switch format {
+		case "markdown":
+			content = storage.ExportMarkdown(conv)
+			ext = ".md"
+		case "json":
+			var err error
+			content, err = storage.ExportJSON(conv)
+			if err != nil {
+				return statusMsg{message: fmt.Sprintf("Failed to export: %v", err)}
+			}
+			ext = ".json"
+		default:
+			return statusMsg{message: "Unsupported export format"}
+		}
+
+		filename := exportFilename(exportDir, conv.Created, ext)
+		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
+			return statusMsg{message: fmt.Sprintf("Failed to write: %v", err)}
+		}
+		return statusMsg{message: fmt.Sprintf("Exported to %s", filename)}
+	}
+}
+
+func (m *model) selectedCopyTexts() []string {
+	if len(m.chatMessages) == 0 {
+		return nil
+	}
+	var texts []string
+	for i, msg := range m.chatMessages {
+		if m.chatCopySelected[i] {
+			texts = append(texts, msg.Content)
+		}
+	}
+	if len(texts) > 0 {
+		return texts
+	}
+	if m.chatCopyIdx >= 0 && m.chatCopyIdx < len(m.chatMessages) {
+		return []string{m.chatMessages[m.chatCopyIdx].Content}
+	}
+	return nil
 }
 
 // Convert between display ChatMessage and storage ConvMessage
@@ -396,9 +565,10 @@ func (m *model) scanAttachableFiles() []string {
 }
 
 // copyToClipboard writes text to the system clipboard.
-// Tries wl-copy (Wayland/WSLg), clip.exe (WSL2), then xclip.
+// Tries pbcopy (macOS), wl-copy (Wayland/WSLg), clip.exe (WSL2), then xclip/xsel.
 func copyToClipboard(text string) error {
 	cmds := [][]string{
+		{"pbcopy"},
 		{"wl-copy"},
 		{"clip.exe"},
 		{"xclip", "-selection", "clipboard"},
@@ -411,7 +581,7 @@ func copyToClipboard(text string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("no clipboard tool found (wl-copy, clip.exe, xclip, xsel)")
+	return fmt.Errorf("no clipboard tool found (pbcopy, wl-copy, clip.exe, xclip, xsel)")
 }
 
 func readFileContent(path string) (string, error) {
@@ -485,7 +655,6 @@ func (m *model) scanProjectFiles() []string {
 	m.fileCacheDir = m.currentDir
 	return files
 }
-
 
 // fuzzyMatch filters files by a query using character-sequence matching (fzf-style).
 // All query chars must appear in order in the path. Scoring favors basename matches,
