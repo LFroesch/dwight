@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"dwight/internal/gemini"
 	"dwight/internal/ollama"
 	"dwight/internal/storage"
 
@@ -93,8 +94,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chatErr = msg.Err
 			m.chatState = ChatStateError
 		} else if !msg.Available {
-			m.chatState = ChatStateModelNotAvailable
-			m.modelPullName = msg.ModelName
+			if msg.CanInstall {
+				m.chatState = ChatStateModelNotAvailable
+				m.modelPullName = msg.ModelName
+			} else {
+				m.chatErr = fmt.Errorf("%s", msg.Reason)
+				m.chatState = ChatStateError
+			}
 		} else {
 			m.chatState = ChatStateReady
 			m.chatTextArea.Focus()
@@ -437,7 +443,7 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			)
 		}
 
-	case "up", "down", "pgup", "pgdown", "home", "end":
+	case "pgup", "pgdown", "shift+up", "shift+down", "shift+home", "shift+end":
 		m.handleChatScroll(msg.String())
 		return m, nil
 	}
@@ -445,7 +451,12 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Update textarea
 	if m.chatState == ChatStateReady && !m.chatStreaming {
 		var cmd tea.Cmd
+		oldHeight := m.chatTextArea.Height()
 		m.chatTextArea, cmd = m.chatTextArea.Update(msg)
+		m.syncChatLayout()
+		if m.chatTextArea.Height() != oldHeight {
+			m.updateChatLines()
+		}
 
 		// Detect @ typed — trigger autocomplete
 		val := m.chatTextArea.Value()
@@ -765,17 +776,21 @@ func (m model) updateModelManager(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		m.viewMode = ViewModelCreate
 		m.editingProfile = -1
-		m.modelInputs = m.newProfileInputs("", "", "", "0.7")
+		m.modelInputs = m.newProfileInputs("", "ollama", "", "", "0.7")
 	case "e":
 		if m.modelSelection < len(m.modelConfig.Profiles) {
 			p := m.modelConfig.Profiles[m.modelSelection]
 			m.viewMode = ViewModelCreate
 			m.editingProfile = m.modelSelection
-			m.modelInputs = m.newProfileInputs(p.Name, p.Model, p.SystemPrompt, fmt.Sprintf("%.1f", p.Temperature))
+			m.modelInputs = m.newProfileInputs(p.Name, p.Provider, p.Model, p.SystemPrompt, fmt.Sprintf("%.1f", p.Temperature))
 		}
 	case "p":
 		if m.modelSelection < len(m.modelConfig.Profiles) {
-			name := m.modelConfig.Profiles[m.modelSelection].Model
+			profile := m.modelConfig.Profiles[m.modelSelection]
+			if storage.NormalizeProvider(profile.Provider) != "ollama" {
+				return m, showStatus("Pull is only available for Ollama profiles")
+			}
+			name := profile.Model
 			m.viewMode = ViewModelPull
 			m.modelPullName = name
 			m.modelPullStatus = fmt.Sprintf("Pulling: %s...", name)
@@ -806,16 +821,20 @@ func (m model) updateModelCreate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.editingProfile = -1
 		return m, nil
 	case "enter":
-		if len(m.modelInputs) >= 4 && m.modelInputs[0].Value() != "" && m.modelInputs[1].Value() != "" {
+		if len(m.modelInputs) >= 5 && m.modelInputs[0].Value() != "" && m.modelInputs[2].Value() != "" {
 			temp := 0.7
-			if t := m.modelInputs[3].Value(); t != "" {
+			if t := m.modelInputs[4].Value(); t != "" {
 				if parsed, err := strconv.ParseFloat(t, 64); err == nil && parsed >= 0 && parsed <= 1 {
 					temp = parsed
 				}
 			}
+			provider := storage.NormalizeProvider(m.modelInputs[1].Value())
+			if provider != "ollama" && provider != "gemini" {
+				return m, showStatus("Provider must be ollama or gemini")
+			}
 			profile := storage.ModelProfile{
-				Name: m.modelInputs[0].Value(), Model: m.modelInputs[1].Value(),
-				SystemPrompt: m.modelInputs[2].Value(), Temperature: temp,
+				Name: m.modelInputs[0].Value(), Provider: provider, Model: m.modelInputs[2].Value(),
+				SystemPrompt: m.modelInputs[3].Value(), Temperature: temp,
 			}
 			if m.editingProfile >= 0 && m.editingProfile < len(m.modelConfig.Profiles) {
 				m.modelConfig.Profiles[m.editingProfile] = profile
@@ -964,23 +983,26 @@ func (m model) updateFocusedInput(inputs []textinput.Model, msg tea.KeyMsg) (tea
 	return m, nil
 }
 
-func (m *model) newProfileInputs(name, modelName, prompt, temp string) []textinput.Model {
-	inputs := make([]textinput.Model, 4)
+func (m *model) newProfileInputs(name, provider, modelName, prompt, temp string) []textinput.Model {
+	inputs := make([]textinput.Model, 5)
 	inputs[0] = textinput.New()
 	inputs[0].SetValue(name)
 	inputs[0].Placeholder = "My Assistant"
 	inputs[0].Focus()
 	inputs[1] = textinput.New()
-	inputs[1].SetValue(modelName)
-	inputs[1].Placeholder = "llama3.2:3b"
+	inputs[1].SetValue(storage.NormalizeProvider(provider))
+	inputs[1].Placeholder = "ollama or gemini"
 	inputs[2] = textinput.New()
-	inputs[2].SetValue(prompt)
-	inputs[2].Placeholder = "You are a helpful assistant..."
-	inputs[2].CharLimit = 500
+	inputs[2].SetValue(modelName)
+	inputs[2].Placeholder = "llama3.2:3b or gemini-2.5-flash"
 	inputs[3] = textinput.New()
-	inputs[3].SetValue(temp)
-	inputs[3].Placeholder = "0.7"
-	inputs[3].CharLimit = 3
+	inputs[3].SetValue(prompt)
+	inputs[3].Placeholder = "You are a helpful assistant..."
+	inputs[3].CharLimit = 500
+	inputs[4] = textinput.New()
+	inputs[4].SetValue(temp)
+	inputs[4].Placeholder = "0.7"
+	inputs[4].CharLimit = 3
 	return inputs
 }
 
@@ -989,54 +1011,38 @@ func (m *model) newProfileInputs(name, modelName, prompt, temp string) []textinp
 // =============================================================================
 
 func (m *model) adjustLayout() {
-	w := m.safeWidth()
-	h := m.safeHeight()
-
-	// Chat area sizing
-	var chatOverhead int
-	if h < 20 {
-		chatOverhead = 8
-	} else if h < 30 {
-		chatOverhead = 12
-	} else {
-		chatOverhead = 15
-	}
-	m.chatMaxLines = h - chatOverhead
-	if m.chatMaxLines < 5 {
-		m.chatMaxLines = 5
-	}
-
-	// Textarea sizing
-	taWidth := w - 4
-	if taWidth < 20 {
-		taWidth = 20
-	}
-	m.chatTextArea.SetWidth(taWidth)
-
-	var taHeight int
-	switch {
-	case h < 15:
-		taHeight = 2
-	case h < 40:
-		taHeight = 3
-	default:
-		taHeight = 4
-	}
-	m.chatTextArea.SetHeight(taHeight)
+	m.syncChatLayout()
 }
 
 // =============================================================================
-// Ollama commands (BubbleTea wrappers)
+// Provider commands (BubbleTea wrappers)
 // =============================================================================
 
 func (m *model) checkModel() tea.Cmd {
 	return func() tea.Msg {
-		name := m.currentProfile().Model
-		avail, err := ollama.CheckModel(name)
-		if err != nil {
-			return CheckModelMsg{Available: false, ModelName: name, Err: err}
+		profile := m.currentProfile()
+		name := profile.Model
+		provider := storage.NormalizeProvider(profile.Provider)
+		switch provider {
+		case "ollama":
+			avail, err := ollama.CheckModel(name)
+			if err != nil {
+				return CheckModelMsg{Available: false, ModelName: name, Provider: provider, Err: err}
+			}
+			return CheckModelMsg{Available: avail, ModelName: name, Provider: provider, CanInstall: true}
+		case "gemini":
+			if err := gemini.CheckModel(name); err != nil {
+				return CheckModelMsg{Available: false, ModelName: name, Provider: provider, Reason: err.Error()}
+			}
+			return CheckModelMsg{Available: true, ModelName: name, Provider: provider}
+		default:
+			return CheckModelMsg{
+				Available: false,
+				ModelName: name,
+				Provider:  provider,
+				Reason:    fmt.Sprintf("Unsupported provider: %s", provider),
+			}
 		}
-		return CheckModelMsg{Available: avail, ModelName: name}
 	}
 }
 
@@ -1044,9 +1050,9 @@ func (m *model) pullModel() tea.Cmd {
 	return func() tea.Msg {
 		name := m.currentProfile().Model
 		if err := ollama.PullModel(name); err != nil {
-			return CheckModelMsg{Available: false, ModelName: name, Err: err}
+			return CheckModelMsg{Available: false, ModelName: name, Provider: "ollama", Err: err}
 		}
-		return CheckModelMsg{Available: true, ModelName: name}
+		return CheckModelMsg{Available: true, ModelName: name, Provider: "ollama"}
 	}
 }
 
@@ -1055,9 +1061,6 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 	m.cancelChat = cancel
 
 	profile := m.currentProfile()
-
-	// Build messages
-	var msgs []ollama.ChatMessage
 	systemPrompt := profile.SystemPrompt
 	if m.settings.MainPrompt != "" {
 		systemPrompt = m.settings.MainPrompt + "\n\n" + systemPrompt
@@ -1075,11 +1078,46 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 		rag.WriteString("=== END RESOURCES ===\nUse these for context.")
 		systemPrompt += rag.String()
 	}
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	baseDir := m.currentDir
 
+	if storage.NormalizeProvider(profile.Provider) == "gemini" {
+		var msgs []gemini.ChatMessage
+		for _, msg := range m.chatMessages[:len(m.chatMessages)-1] {
+			if msg.Role == "user" || msg.Role == "assistant" {
+				content := msg.Content
+				if msg.Role == "user" {
+					content = resolveAtReferences(content, baseDir)
+				}
+				msgs = append(msgs, gemini.ChatMessage{Role: msg.Role, Content: content})
+			}
+		}
+		msgs = append(msgs, gemini.ChatMessage{Role: "user", Content: resolveAtReferences(userMsg, baseDir)})
+
+		req := gemini.ChatRequest{
+			Model:       profile.Model,
+			Messages:    msgs,
+			System:      systemPrompt,
+			Temperature: profile.Temperature,
+			Timeout:     time.Duration(m.settings.ChatTimeout) * time.Second,
+		}
+
+		return func() tea.Msg {
+			ch, err := gemini.ChatStream(ctx, req)
+			if err != nil {
+				if ctx.Err() != nil {
+					return InterruptMsg{}
+				}
+				return ResponseMsg{Err: err}
+			}
+			return streamStartedMsg{ch: adaptGeminiStream(ch)}
+		}
+	}
+
+	var msgs []ollama.ChatMessage
 	if systemPrompt != "" {
 		msgs = append(msgs, ollama.ChatMessage{Role: "system", Content: systemPrompt})
 	}
-	baseDir := m.currentDir
 	for _, msg := range m.chatMessages[:len(m.chatMessages)-1] {
 		if msg.Role == "user" || msg.Role == "assistant" {
 			content := msg.Content
@@ -1107,6 +1145,24 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 		}
 		return streamStartedMsg{ch: ch}
 	}
+}
+
+func adaptGeminiStream(src <-chan gemini.StreamChunk) <-chan ollama.StreamChunk {
+	dst := make(chan ollama.StreamChunk)
+	go func() {
+		defer close(dst)
+		for chunk := range src {
+			dst <- ollama.StreamChunk{
+				Content:      chunk.Content,
+				Done:         chunk.Done,
+				Duration:     chunk.Duration,
+				PromptTokens: chunk.PromptTokens,
+				TotalTokens:  chunk.TotalTokens,
+				Err:          chunk.Err,
+			}
+		}
+	}()
+	return dst
 }
 
 func pullOllamaModel(name string) tea.Cmd {

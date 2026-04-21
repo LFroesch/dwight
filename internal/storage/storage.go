@@ -104,6 +104,7 @@ func defaultSettings() Settings {
 
 type ModelProfile struct {
 	Name         string  `json:"name"`
+	Provider     string  `json:"provider,omitempty"`
 	Model        string  `json:"model"`
 	SystemPrompt string  `json:"system_prompt"`
 	Temperature  float64 `json:"temperature"`
@@ -122,9 +123,9 @@ func defaultModel() string {
 }
 
 var DefaultProfiles = []ModelProfile{
-	{Name: "General Assistant", Model: defaultModel(), SystemPrompt: "You are a helpful AI assistant. Answer questions clearly and concisely.", Temperature: 0.7},
-	{Name: "Coder Assistant", Model: defaultModel(), SystemPrompt: "You are a helpful coding assistant. Provide clear, concise code examples.", Temperature: 0.5},
-	{Name: "Creative Writer", Model: defaultModel(), SystemPrompt: "You are a creative writing assistant. Be imaginative and descriptive.", Temperature: 0.9},
+	{Name: "General Assistant", Provider: "ollama", Model: defaultModel(), SystemPrompt: "You are a helpful AI assistant. Answer questions clearly and concisely.", Temperature: 0.7},
+	{Name: "Coder Assistant", Provider: "ollama", Model: defaultModel(), SystemPrompt: "You are a helpful coding assistant. Provide clear, concise code examples.", Temperature: 0.5},
+	{Name: "Creative Writer", Provider: "ollama", Model: defaultModel(), SystemPrompt: "You are a creative writing assistant. Be imaginative and descriptive.", Temperature: 0.9},
 }
 
 func LoadModelConfig() ModelConfig {
@@ -139,6 +140,10 @@ func LoadModelConfig() ModelConfig {
 	json.Unmarshal(data, &mc)
 	if len(mc.Profiles) == 0 {
 		mc.Profiles = DefaultProfiles
+	} else {
+		for i := range mc.Profiles {
+			mc.Profiles[i].Provider = NormalizeProvider(mc.Profiles[i].Provider)
+		}
 	}
 	return mc
 }
@@ -151,9 +156,22 @@ func SaveModelConfig(mc ModelConfig) {
 
 func (mc *ModelConfig) Current() ModelProfile {
 	if mc.CurrentProfile >= 0 && mc.CurrentProfile < len(mc.Profiles) {
-		return mc.Profiles[mc.CurrentProfile]
+		profile := mc.Profiles[mc.CurrentProfile]
+		profile.Provider = NormalizeProvider(profile.Provider)
+		return profile
 	}
 	return DefaultProfiles[0]
+}
+
+func NormalizeProvider(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "ollama":
+		return "ollama"
+	case "gemini", "google":
+		return "gemini"
+	default:
+		return strings.ToLower(strings.TrimSpace(provider))
+	}
 }
 
 // --- Conversations ---

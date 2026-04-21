@@ -1,4 +1,27 @@
 ## DevLog
+
+### 2026-04-21 — Agent: bug-fixer
+- Closing gap with Claude Code. Next up: multi-file @, bash execution, diff view.
+
+### 2026-04-21: Chat composer overhaul
+- Reworked the chat draft input so it auto-grows with content, keeps normal arrow-key navigation inside multiline drafts, and scrolls internally once it hits its max height
+- Moved transcript scrolling to page/shift navigation so composing a longer message no longer fights with chat history scrolling
+- Added a bordered composer with inline usage hints, then updated help text and README to match the new workflow
+- Files touched: `main.go`, `helpers.go`, `update.go`, `views.go`, `README.md`, `WORK.md`
+
+### 2026-04-21: Speaker labels in copied chat messages
+- Copy mode clipboard output now prefixes each copied message with its speaker, using the configured username for user messages and `AI`/`System` for non-user roles
+- This keeps copied excerpts self-contained when pasted outside Dwight instead of losing who said what
+- Files touched: `helpers.go`, `README.md`, `WORK.md`
+
+### 2026-04-21: Gemini provider support for demo deployments
+- Added provider-aware model profiles with a new `provider` field; existing profiles normalize to `ollama`
+- Added Gemini streaming chat support using Google AI Studio keys from `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+- Updated model management UI so profiles can target `ollama` or `gemini`, while model library/pull actions stay explicitly Ollama-only
+- Polished demo UX with clearer header/footer model info, better empty-state guidance, richer `?` help text, and a more actionable missing-Gemini-key error
+- Updated README with a concrete Gemini demo setup flow for remote deployments that cannot run Ollama
+- Files touched: `internal/gemini/gemini.go`, `internal/storage/storage.go`, `helpers.go`, `update.go`, `views.go`, `model.go`, `main.go`, `README.md`, `WORK.md`
+
 ### 2026-04-18: Chat clear/close semantics, safer history restore, direct export
 - `ctrl+c` is now chat-local: clears the current draft first, closes chat only when the composer is already empty, and interrupts generation while streaming
 - Fixed conversation state leakage when opening a fresh chat after loading history or after clearing chat; old conversations no longer stay bound and get overwritten by mistake

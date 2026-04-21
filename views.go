@@ -87,14 +87,14 @@ func (m model) viewMenu() string {
 	profile := ""
 	if len(m.modelConfig.Profiles) > 0 {
 		p := m.modelConfig.Current()
-		profile = s.Dim.Render("model: ") + s.Success.Render(p.Model)
+		profile = s.Dim.Render("provider/model: ") + s.Success.Render(fmt.Sprintf("%s · %s", storage.NormalizeProvider(p.Provider), p.Model))
 	}
 
 	headerLine := s.Title.Render("dwight")
 	if profile != "" {
 		headerLine += s.Dim.Render("  ·  ") + profile
 	}
-	subtitle := s.Dim.Render("local AI assistant")
+	subtitle := s.Dim.Render("terminal AI assistant")
 
 	var items strings.Builder
 	for i, item := range m.menuItems {
@@ -114,7 +114,7 @@ func (m model) viewMenu() string {
 		Padding(0, 1).
 		Render(strings.TrimRight(items.String(), "\n"))
 
-	footer := s.Footer("j/k", "navigate", "enter", "select", "q", "quit")
+	footer := s.Footer("j/k", "navigate", "enter", "select", "q", "quit", "?", "help")
 	status := m.renderStatus()
 
 	parts := []string{headerLine, subtitle, "", menuBox}
@@ -131,18 +131,25 @@ func (m model) viewMenu() string {
 
 func (m model) viewChat() string {
 	profile := m.currentProfile()
+	provider := storage.NormalizeProvider(profile.Provider)
 
 	// Header: model name + context bar + stats
-	header := s.Title.Render("dwight") + s.Dim.Render(" | ") + s.Success.Render(profile.Model) + s.Dim.Render(" | ") + s.Title.Render(profile.Name)
+	header := s.Title.Render("dwight") +
+		s.Dim.Render(" | profile: ") + s.Title.Render(profile.Name) +
+		s.Dim.Render(" | provider: ") + s.Success.Render(provider) +
+		s.Dim.Render(" | model: ") + s.Success.Render(profile.Model)
 
 	// Use the last message's TotalTokens — Ollama reports cumulative session tokens per call.
 	totalTokens := 0
 	if len(m.chatMessages) > 0 {
 		totalTokens = m.chatMessages[len(m.chatMessages)-1].TotalTokens
 	}
-	ctxSize := ollama.ContextWindowSize(profile.Model)
+	ctxSize := 0
+	if provider == "ollama" {
+		ctxSize = ollama.ContextWindowSize(profile.Model)
+	}
 
-	if totalTokens > 0 {
+	if totalTokens > 0 && ctxSize > 0 {
 		// Context usage bar
 		pct := float64(totalTokens) / float64(ctxSize)
 		barWidth := 15
@@ -197,7 +204,7 @@ func (m model) viewChat() string {
 	case ChatStateInit, ChatStateCheckingModel:
 		content = []string{"Checking model..."}
 	case ChatStateModelNotAvailable:
-		content = []string{s.Warning.Render(fmt.Sprintf("Model '%s' not available. Y to pull, N to cancel", m.modelPullName))}
+		content = []string{s.Warning.Render(fmt.Sprintf("Ollama model '%s' not available. Y to pull, N to cancel", m.modelPullName))}
 	case ChatStateError:
 		errMsg := "Error occurred"
 		if m.chatErr != nil {
@@ -214,7 +221,7 @@ func (m model) viewChat() string {
 	var inputArea string
 	switch m.chatState {
 	case ChatStateReady:
-		inputArea = m.chatTextArea.View()
+		inputArea = m.viewChatComposer()
 	case ChatStateLoading:
 		inputArea = s.Warning.Render(fmt.Sprintf("%s Generating...", m.chatSpinner.View()))
 	case ChatStateReview:
@@ -230,7 +237,7 @@ func (m model) viewChat() string {
 	case m.chatState == ChatStateLoading || m.chatStreaming:
 		footer = s.Footer("esc", "interrupt", "ctrl+c", "interrupt")
 	default:
-		footer = s.Footer("enter", "send", "ctrl+c", "clear/close", "ctrl+y", "copy msg", "ctrl+o", "export md", "alt+,/.", "model", "ctrl+n", "new")
+		footer = s.Footer("enter", "send", "alt+enter", "newline", "up/down", "move cursor", "pgup/dn", "scroll chat", "ctrl+y", "copy msg", "ctrl+n", "new")
 	}
 	status := m.renderStatus()
 
@@ -243,6 +250,33 @@ func (m model) viewChat() string {
 	}
 	result += "\n" + footer
 	return result
+}
+
+func (m model) viewChatComposer() string {
+	lineCount := m.chatComposerLineCount(m.chatTextArea.Width())
+	meta := []string{
+		s.Dim.Render(fmt.Sprintf("draft %d line", lineCount)),
+		s.Dim.Render("enter sends"),
+		s.Dim.Render("alt+enter adds a newline"),
+		s.Dim.Render("up/down moves inside the draft"),
+		s.Dim.Render("pgup/pgdn scrolls chat history"),
+	}
+	if hidden := lineCount - m.chatTextArea.Height(); hidden > 0 {
+		meta = append(meta, s.Warning.Render(fmt.Sprintf("%d more line(s) above", hidden)))
+	}
+
+	borderColor := s.DarkGray
+	if m.chatState == ChatStateReady {
+		borderColor = s.Purple
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Render(m.chatTextArea.View())
+
+	return strings.Join(meta, s.Dim.Render("  ·  ")) + "\n" + box
 }
 
 // =============================================================================
@@ -337,7 +371,7 @@ func (m model) viewModelManager() string {
 		if i == m.modelConfig.CurrentProfile {
 			indicator = "* "
 		}
-		line := fmt.Sprintf("%s%-20s | %-25s | Temp: %.1f", indicator, p.Name, p.Model, p.Temperature)
+		line := fmt.Sprintf("%s%-18s | %-7s | %-23s | Temp: %.1f", indicator, p.Name, storage.NormalizeProvider(p.Provider), p.Model, p.Temperature)
 		if i == m.modelSelection {
 			content.WriteString(s.Selected.Render("> " + line))
 		} else {
@@ -346,7 +380,7 @@ func (m model) viewModelManager() string {
 		content.WriteString("\n")
 	}
 
-	footer := s.Footer("j/k", "navigate", "enter", "set default", "n", "new", "e", "edit", "b", "browse library", "p", "pull", "d", "delete", "esc", "back")
+	footer := s.Footer("j/k", "navigate", "enter", "set default", "n", "new", "e", "edit", "b", "browse Ollama library", "p", "pull Ollama model", "d", "delete", "esc", "back")
 	return lipgloss.JoinVertical(lipgloss.Left, title, "", content.String(), "", footer)
 }
 
@@ -357,7 +391,7 @@ func (m model) viewModelCreate() string {
 	}
 	title := s.Title.Render(titleText)
 
-	labels := []string{"Name:", "Model:", "System Prompt:", "Temperature (0-1):"}
+	labels := []string{"Name:", "Provider:", "Model:", "System Prompt:", "Temperature (0-1):"}
 	var fields []string
 	for i, input := range m.modelInputs {
 		label := s.Success.Render(labels[i])
@@ -689,14 +723,22 @@ func (m model) renderHelp() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(s.Purple).
 		Padding(1, 2).
-		Width(min(60, m.width-4))
+		Width(min(72, m.width-4))
 
 	keys := []struct{ key, desc string }{
 		{"j/k, ↑/↓", "Navigate"},
 		{"enter", "Select / send message"},
+		{"alt+enter", "Insert newline in chat draft"},
+		{"↑/↓ in chat", "Move within a multiline draft"},
+		{"pgup / pgdn", "Scroll chat history"},
 		{"n", "New conversation"},
 		{"e", "Edit / export"},
 		{"d", "Delete"},
+		{"ctrl+r", "Attach local files as context"},
+		{"@file", "Reference a project file in chat"},
+		{"alt+, / alt+.", "Switch model profile"},
+		{"ctrl+o", "Export current chat to Markdown"},
+		{"ctrl+y", "Copy one or more messages"},
 		{"esc", "Back"},
 		{"q", "Quit"},
 		{"?", "Toggle this help"},
@@ -710,6 +752,8 @@ func (m model) renderHelp() string {
 		lines = append(lines, fmt.Sprintf("  %s  %s",
 			s.KeyStyle.Render(fmt.Sprintf("%-16s", k.key)), k.desc))
 	}
+	lines = append(lines, "")
+	lines = append(lines, s.Dim.Render("Providers: use Ollama profiles for local models, Gemini profiles with GEMINI_API_KEY / GOOGLE_API_KEY for demos."))
 	lines = append(lines, "")
 	lines = append(lines, s.Dim.Render("Press ?, q, or esc to close"))
 

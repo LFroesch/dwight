@@ -23,6 +23,8 @@ import (
 // =============================================================================
 
 func (m *model) updateChatLines() {
+	m.syncChatLayout()
+
 	contentWidth := m.width - 4
 	if contentWidth < 20 {
 		contentWidth = 20
@@ -39,11 +41,14 @@ func (m *model) updateChatLines() {
 
 	if len(m.chatMessages) == 0 && !m.chatStreaming {
 		profile := m.currentProfile()
+		provider := storage.NormalizeProvider(profile.Provider)
 		m.chatLines = append(m.chatLines,
 			"",
 			s.Dim.Render("  What can I help you with?"),
 			"",
 			s.Dim.Render("  Type a message, or use @filename to reference files."),
+			s.Dim.Render("  Press ? for help and keybindings."),
+			s.Dim.Render(fmt.Sprintf("  Provider: %s", provider)),
 			s.Dim.Render(fmt.Sprintf("  Model: %s", profile.Model)),
 			"",
 		)
@@ -114,14 +119,14 @@ func formatChatMessage(msg *ChatMessage, width int) []string {
 		if !msg.Timestamp.IsZero() {
 			timeStr = msg.Timestamp.Format("3:04PM") + " "
 		}
-		header := timeStr + "AI:"
+		header := timeStr + "dwight:"
 		if msg.Duration > 0 && msg.TotalTokens > 0 {
 			respTokens := msg.TotalTokens - msg.PromptTokens
 			tokPerSec := 0.0
 			if msg.Duration.Seconds() > 0 {
 				tokPerSec = float64(respTokens) / msg.Duration.Seconds()
 			}
-			header = fmt.Sprintf("%sAI: %.1fs · %.0f tok/s · %d tok",
+			header = fmt.Sprintf("%sdwight: %.1fs · %.0f tok/s · %d tok",
 				timeStr, msg.Duration.Seconds(), tokPerSec, respTokens)
 		}
 		lines = append(lines, s.AssistantMsg.Render(header))
@@ -197,17 +202,91 @@ func (m *model) getVisibleChatLines() []string {
 	return m.chatLines[start:end]
 }
 
+func (m *model) syncChatLayout() {
+	w := m.safeWidth()
+	h := m.safeHeight()
+
+	taWidth := w - 4
+	if taWidth < 20 {
+		taWidth = 20
+	}
+	m.chatTextArea.SetWidth(taWidth)
+
+	minComposerHeight := 3
+	maxComposerHeight := 10
+	switch {
+	case h < 18:
+		maxComposerHeight = 4
+	case h < 26:
+		maxComposerHeight = 6
+	case h < 36:
+		maxComposerHeight = 8
+	}
+	if maxComposerHeight < minComposerHeight {
+		maxComposerHeight = minComposerHeight
+	}
+	m.chatTextArea.MaxHeight = maxComposerHeight
+	m.chatTextArea.SetHeight(m.chatComposerHeight(taWidth, minComposerHeight, maxComposerHeight))
+
+	chatChrome := m.chatTextArea.Height() + 8
+	switch {
+	case h >= 34:
+		chatChrome++
+	case h < 20:
+		chatChrome--
+	}
+
+	m.chatMaxLines = h - chatChrome
+	if m.chatMaxLines < 5 {
+		m.chatMaxLines = 5
+	}
+}
+
+func (m *model) chatComposerHeight(width, minHeight, maxHeight int) int {
+	rows := m.chatComposerLineCount(width)
+	if rows < minHeight {
+		return minHeight
+	}
+	if rows > maxHeight {
+		return maxHeight
+	}
+	return rows
+}
+
+func (m *model) chatComposerLineCount(width int) int {
+	if width < 10 {
+		width = 10
+	}
+	value := m.chatTextArea.Value()
+	if value == "" {
+		return 1
+	}
+
+	rows := 0
+	for _, line := range strings.Split(value, "\n") {
+		if line == "" {
+			rows++
+			continue
+		}
+		rows += len(wrapText(line, width))
+	}
+	if rows == 0 {
+		return 1
+	}
+	return rows
+}
+
 func (m *model) handleChatScroll(key string) {
 	maxScroll := len(m.chatLines) - m.chatMaxLines
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
 	switch key {
-	case "up":
+	case "up", "shift+up":
 		if m.chatScrollPos > 0 {
 			m.chatScrollPos--
 		}
-	case "down":
+	case "down", "shift+down":
 		if m.chatScrollPos < maxScroll {
 			m.chatScrollPos++
 		}
@@ -221,9 +300,9 @@ func (m *model) handleChatScroll(key string) {
 		if m.chatScrollPos > maxScroll {
 			m.chatScrollPos = maxScroll
 		}
-	case "home":
+	case "home", "shift+home":
 		m.chatScrollPos = 0
-	case "end":
+	case "end", "shift+end":
 		m.chatScrollPos = maxScroll
 	}
 }
@@ -506,16 +585,44 @@ func (m *model) selectedCopyTexts() []string {
 	var texts []string
 	for i, msg := range m.chatMessages {
 		if m.chatCopySelected[i] {
-			texts = append(texts, msg.Content)
+			texts = append(texts, formatCopiedMessage(msg, m.settings.UserName))
 		}
 	}
 	if len(texts) > 0 {
 		return texts
 	}
 	if m.chatCopyIdx >= 0 && m.chatCopyIdx < len(m.chatMessages) {
-		return []string{m.chatMessages[m.chatCopyIdx].Content}
+		return []string{formatCopiedMessage(m.chatMessages[m.chatCopyIdx], m.settings.UserName)}
 	}
 	return nil
+}
+
+func formatCopiedMessage(msg ChatMessage, userName string) string {
+	speaker := copiedMessageSpeaker(msg.Role, userName)
+	if speaker == "" {
+		return msg.Content
+	}
+	return speaker + ":\n" + msg.Content
+}
+
+func copiedMessageSpeaker(role, userName string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "user":
+		if strings.TrimSpace(userName) != "" {
+			return strings.TrimSpace(userName)
+		}
+		return "You"
+	case "assistant", "model":
+		return "dwight"
+	case "system":
+		return "System"
+	default:
+		normalized := strings.TrimSpace(role)
+		if normalized == "" {
+			return ""
+		}
+		return strings.Title(normalized)
+	}
 }
 
 // Convert between display ChatMessage and storage ConvMessage

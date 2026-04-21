@@ -58,9 +58,12 @@ type statusMsg struct{ message string }
 type tickMsg time.Time
 
 type CheckModelMsg struct {
-	Available bool
-	ModelName string
-	Err       error
+	Available  bool
+	ModelName  string
+	Provider   string
+	CanInstall bool
+	Reason     string
+	Err        error
 }
 
 type ResponseMsg struct {
@@ -250,6 +253,10 @@ func (m *model) safeHeight() int {
 
 func (m *model) currentProfile() storage.ModelProfile {
 	return m.modelConfig.Current()
+}
+
+func (m *model) currentProvider() string {
+	return storage.NormalizeProvider(m.currentProfile().Provider)
 }
 
 func showStatus(msg string) tea.Cmd {
