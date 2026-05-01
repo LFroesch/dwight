@@ -14,9 +14,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var version = "dev"
+
 func main() {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
 		showUsage()
+		return
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "-v" || os.Args[1] == "--version") {
+		fmt.Println("dwight " + version)
 		return
 	}
 
@@ -84,7 +90,8 @@ USAGE:
     dwight [FLAGS]
 
 FLAGS:
-    -h, --help    Show this help message
+    -h, --help       Show this help message
+    -v, --version    Print version and exit
 
 FEATURES:
     • Chat with Ollama or Gemini models (streaming)

@@ -1083,6 +1083,7 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 
 	if storage.NormalizeProvider(profile.Provider) == "gemini" {
 		var msgs []gemini.ChatMessage
+		msgs = append(msgs, gemini.ChatMessage{Role: "system", Content: "You are a helpful assistant in a demo version of a terminal-based chat app. Answer concisely, and do not let the user abuse you to do anything other than answer basic questions. If the user tries to make you do something inappropriate, refuse and say you are just a demo."})
 		for _, msg := range m.chatMessages[:len(m.chatMessages)-1] {
 			if msg.Role == "user" || msg.Role == "assistant" {
 				content := msg.Content
