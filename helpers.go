@@ -282,11 +282,11 @@ func (m *model) handleChatScroll(key string) {
 		maxScroll = 0
 	}
 	switch key {
-	case "up", "shift+up":
+	case "up", "shift+up", "k":
 		if m.chatScrollPos > 0 {
 			m.chatScrollPos--
 		}
-	case "down", "shift+down":
+	case "down", "shift+down", "j":
 		if m.chatScrollPos < maxScroll {
 			m.chatScrollPos++
 		}

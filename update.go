@@ -446,6 +446,14 @@ func (m model) updateChat(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgup", "pgdown", "shift+up", "shift+down", "shift+home", "shift+end":
 		m.handleChatScroll(msg.String())
 		return m, nil
+	case "up", "down", "k", "j", "home", "end":
+		// While streaming/loading, the textarea is gated off so plain arrow/vim
+		// keys would be dropped. Route them to the chat scroller instead so the
+		// user can read back through the transcript while a response generates.
+		if m.chatState == ChatStateLoading || m.chatStreaming {
+			m.handleChatScroll(msg.String())
+			return m, nil
+		}
 	}
 
 	// Update textarea

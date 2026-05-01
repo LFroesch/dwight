@@ -1,5 +1,8 @@
 ## DevLog
 
+### 2026-04-30: Scroll the chat while streaming
+Plain `up`/`down`/`k`/`j`/`home`/`end` were dropped during streaming because the textarea (the usual key target) is gated off. Routed them to `handleChatScroll` when `chatStreaming || chatState == ChatStateLoading`, and added `j`/`k` to the scroller's switch. Files: update.go, helpers.go.
+
 ### 2026-04-21 — Agent: bug-fixer
 - Closing gap with Claude Code. Next up: multi-file @, bash execution, diff view.
 
