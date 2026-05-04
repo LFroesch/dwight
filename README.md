@@ -14,10 +14,22 @@ curl -fsSL https://raw.githubusercontent.com/LFroesch/dwight/main/install.sh | b
 
 Or download a binary from [GitHub Releases](https://github.com/LFroesch/dwight/releases).
 
+Or install with Go:
+
+```bash
+go install github.com/LFroesch/dwight@latest
+```
+
 Or build from source:
 
 ```bash
 make install
+```
+
+Command:
+
+```bash
+dwight
 ```
 
 ## Usage

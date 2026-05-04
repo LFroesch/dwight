@@ -1,5 +1,11 @@
 ## DevLog
 
+### 2026-05-04: Backlog audit and v1 cleanup
+- Audited `WORK.md` against the current codebase to remove stale items that are already shipped.
+- Reframed the remaining list around actual v1 status: no confirmed blockers, one partial code-review flow (`accept` + diff preview are in, `edit in $EDITOR` is not), plus a small set of polish items.
+- Moved larger roadmap ideas into a clearer post-v1 backlog.
+- Files touched: `WORK.md`, `DEVLOG.md`
+
 ### 2026-04-30: Scroll the chat while streaming
 Plain `up`/`down`/`k`/`j`/`home`/`end` were dropped during streaming because the textarea (the usual key target) is gated off. Routed them to `handleChatScroll` when `chatStreaming || chatState == ChatStateLoading`, and added `j`/`k` to the scroller's switch. Files: update.go, helpers.go.
 
