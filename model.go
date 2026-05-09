@@ -232,21 +232,16 @@ type CodeBlock struct {
 // Helpers
 // =============================================================================
 
-const (
-	minWidth  = 60
-	minHeight = 20
-)
-
 func (m *model) safeWidth() int {
-	if m.width < minWidth {
-		return minWidth
+	if m.width < 1 {
+		return 1
 	}
 	return m.width
 }
 
 func (m *model) safeHeight() int {
-	if m.height < minHeight {
-		return minHeight
+	if m.height < 1 {
+		return 1
 	}
 	return m.height
 }

@@ -1031,6 +1031,14 @@ func (m *model) checkModel() tea.Cmd {
 		profile := m.currentProfile()
 		name := profile.Model
 		provider := storage.NormalizeProvider(profile.Provider)
+		if isDemoMode() && provider == "ollama" {
+			return CheckModelMsg{
+				Available: false,
+				ModelName: name,
+				Provider:  provider,
+				Reason:    demoProviderReason(provider),
+			}
+		}
 		switch provider {
 		case "ollama":
 			avail, err := ollama.CheckModel(name)
@@ -1057,6 +1065,14 @@ func (m *model) checkModel() tea.Cmd {
 func (m *model) pullModel() tea.Cmd {
 	return func() tea.Msg {
 		name := m.currentProfile().Model
+		if isDemoMode() {
+			return CheckModelMsg{
+				Available: false,
+				ModelName: name,
+				Provider:  "ollama",
+				Reason:    demoProviderReason("ollama"),
+			}
+		}
 		if err := ollama.PullModel(name); err != nil {
 			return CheckModelMsg{Available: false, ModelName: name, Provider: "ollama", Err: err}
 		}
@@ -1087,11 +1103,11 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 		systemPrompt += rag.String()
 	}
 	systemPrompt = strings.TrimSpace(systemPrompt)
+	systemPrompt = applyDemoSystemPrompt(systemPrompt)
 	baseDir := m.currentDir
 
 	if storage.NormalizeProvider(profile.Provider) == "gemini" {
 		var msgs []gemini.ChatMessage
-		msgs = append(msgs, gemini.ChatMessage{Role: "system", Content: "You are a helpful assistant in a demo version of a terminal-based chat app. Answer concisely, and do not let the user abuse you to do anything other than answer basic questions. If the user tries to make you do something inappropriate, refuse and say you are just a demo."})
 		for _, msg := range m.chatMessages[:len(m.chatMessages)-1] {
 			if msg.Role == "user" || msg.Role == "assistant" {
 				content := msg.Content
@@ -1117,7 +1133,7 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 				if ctx.Err() != nil {
 					return InterruptMsg{}
 				}
-				return ResponseMsg{Err: err}
+				return ResponseMsg{Err: rewriteDemoChatError(err, "gemini")}
 			}
 			return streamStartedMsg{ch: adaptGeminiStream(ch)}
 		}
@@ -1150,7 +1166,7 @@ func (m *model) sendChat(userMsg string) tea.Cmd {
 			if ctx.Err() != nil {
 				return InterruptMsg{}
 			}
-			return ResponseMsg{Err: err}
+			return ResponseMsg{Err: rewriteDemoChatError(err, "ollama")}
 		}
 		return streamStartedMsg{ch: ch}
 	}

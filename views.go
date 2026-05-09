@@ -719,11 +719,15 @@ func formatSize(size int64) string {
 }
 
 func (m model) renderHelp() string {
+	helpWidth := min(72, m.width-4)
+	if helpWidth < 28 {
+		helpWidth = 28
+	}
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(s.Purple).
 		Padding(1, 2).
-		Width(min(72, m.width-4))
+		Width(helpWidth)
 
 	keys := []struct{ key, desc string }{
 		{"j/k, ↑/↓", "Navigate"},
@@ -734,10 +738,13 @@ func (m model) renderHelp() string {
 		{"n", "New conversation"},
 		{"e", "Edit / export"},
 		{"d", "Delete"},
+		{"a / r / n", "Accept / refine / skip review blocks"},
 		{"ctrl+r", "Attach local files as context"},
 		{"@file", "Reference a project file in chat"},
 		{"alt+, / alt+.", "Switch model profile"},
 		{"ctrl+o", "Export current chat to Markdown"},
+		{"ctrl+s", "Save conversation"},
+		{"ctrl+l", "Clear chat"},
 		{"ctrl+y", "Copy one or more messages"},
 		{"esc", "Back"},
 		{"q", "Quit"},

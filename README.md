@@ -1,128 +1,94 @@
-# Dwight
+# dwight
 
-Terminal AI chat client for Ollama and Gemini models. Chat, manage conversations, attach files as context, and switch between provider-aware model profiles. Built with Go and [Bubble Tea](https://github.com/charmbracelet/bubbletea).
+Terminal AI chat client for Ollama and Gemini. `dwight` gives you a simple chat UI, saved conversations, provider-aware model profiles, and file attachments for local context.
 
-## Quick Install
+## Install
 
 Supported platforms: Linux and macOS. On Windows, use WSL.
 
-Recommended (installs to `~/.local/bin`):
+Recommended:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LFroesch/dwight/main/install.sh | bash
 ```
 
-Or download a binary from [GitHub Releases](https://github.com/LFroesch/dwight/releases).
-
-Or install with Go:
+Other options:
 
 ```bash
 go install github.com/LFroesch/dwight@latest
-```
-
-Or build from source:
-
-```bash
 make install
 ```
 
-Command:
+Run:
 
 ```bash
 dwight
+dwight --version
 ```
 
-## Usage
+## Providers
+
+Ollama works out of the box if you already have a local daemon running:
 
 ```bash
-dwight                                       # connect to localhost:11434
-OLLAMA_HOST=xxx.xx.xx.x:11434 dwight        # connect to remote host
-DWIGHT_MODEL=llama3.2:3b dwight             # override default model
-GEMINI_API_KEY=your_key dwight              # use Gemini profiles with an API key
-```
-
-## Gemini Demo Setup
-
-For a demo deployment where you cannot run Ollama:
-
-```bash
-export GEMINI_API_KEY="your-google-ai-studio-key"
 dwight
+OLLAMA_HOST=http://localhost:11434 dwight
+DWIGHT_MODEL=qwen2.5:7b dwight
 ```
 
-Then in Dwight:
+Gemini works through an API key:
 
-1. Open `Model Manager`
-2. Press `n`
-3. Set `Provider` to `gemini`
-4. Set `Model` to `gemini-2.5-flash`
-5. Save the profile and make it the default
+```bash
+GEMINI_API_KEY=your_key dwight
+```
 
-Dwight will use `GEMINI_API_KEY` automatically. `GOOGLE_API_KEY` also works.
+`GOOGLE_API_KEY` is also accepted.
 
 ## Features
 
-- **Chat** — Auto-growing multi-line composer with internal scrolling, arrow-key cursor movement, markdown rendering, token tracking, and multi-message copy mode with speaker labels in clipboard output
-- **Draft Controls** — `ctrl+c` clears the current draft, then closes chat when the input is already empty
-- **Model Profiles** — Switch between saved Ollama/Gemini configurations (Alt+,/.)
-- **Conversations** — Save, load, resume, and export to Markdown/JSON with timestamps, project/day export folders, and inline status feedback
-- **RAG** — Attach local files as context for the current chat (Ctrl+R)
-- **Model Library** — Browse available Ollama models and pull new ones
-- **Help Overlay** — Press `?` anywhere for keybindings and provider setup hints
+- Chat with Ollama or Gemini models
+- Save multiple model profiles and switch between them
+- Save, reopen, and export conversations
+- Attach local files as context
+- Browse available Ollama models and pull new ones
+- Project-aware work context detection from the directory you launch it in
 
-## Keybindings
+## Storage
 
-### Menu
-| Key | Action |
-|-----|--------|
-| `j/k` | Navigate |
-| `enter` | Select |
-| `q` | Quit |
+User data lives under `~/.local/share/dwight/`.
 
-### Chat
+| Path | Purpose |
+|------|---------|
+| `config.json` | app config |
+| `.dwight-models.json` | saved model profiles |
+| `settings.json` | user settings |
+| `conversations/` | saved conversations |
+| `exports/` | Markdown or JSON exports |
+
+## Controls
+
 | Key | Action |
 |-----|--------|
 | `enter` | Send message |
-| `alt+enter` | Insert newline in the chat draft |
-| `up` / `down` | Move within a multi-line draft |
-| `pgup` / `pgdown` | Scroll chat history |
-| `ctrl+c` | Clear draft, or close chat if draft is empty |
-| `ctrl+o` | Export current chat to Markdown |
-| `ctrl+l` | Clear chat |
+| `alt+enter` | Insert newline |
 | `ctrl+s` | Save conversation |
+| `ctrl+o` | Export conversation |
 | `ctrl+n` | New conversation |
-| `ctrl+r` | Attach file (RAG) |
-| `ctrl+y` | Copy mode (`space` mark, `y` copy selected/current) |
+| `ctrl+l` | Clear chat |
+| `ctrl+r` | Attach file |
+| `ctrl+y` | Copy mode |
 | `alt+,` / `alt+.` | Switch model profile |
-| `?` | Toggle help overlay |
-| `esc` | Back to menu |
+| `?` | Help |
+| `esc` | Back |
 
-## Configuration
+## Environment
 
-Stored in `~/.local/share/dwight/`:
-
-| File | Purpose |
-|------|---------|
-| `config.json` | App config (file types, templates dir) |
-| `.dwight-models.json` | Model profiles (`provider`, model, temperature, system prompt) |
-| `settings.json` | System prompt, username, timeout |
-| `conversations/` | Saved conversation history (JSON) |
-| `exports/` | Exports grouped by project and day, e.g. `exports/<project>/YYYY-MM-DD/04-18-26_3-12-pm.md` |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OLLAMA_HOST` | `localhost:11434` | Ollama API endpoint |
-| `DWIGHT_MODEL` | `qwen2.5:7b` | Default model for new profiles |
-| `GEMINI_API_KEY` | unset | Gemini API key from Google AI Studio |
-| `GOOGLE_API_KEY` | unset | Alternate Gemini API key env var |
-
-## Requirements
-
-- Go 1.23+
-- Ollama running locally/remotely for Ollama profiles
-- Gemini API key for Gemini profiles
+| Variable | Purpose |
+|----------|---------|
+| `OLLAMA_HOST` | Ollama endpoint |
+| `DWIGHT_MODEL` | default model for new profiles |
+| `GEMINI_API_KEY` | Gemini API key |
+| `GOOGLE_API_KEY` | alternate Gemini API key env var |
 
 ## License
 
