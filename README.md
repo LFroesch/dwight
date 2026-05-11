@@ -1,6 +1,8 @@
 # dwight
 
-Terminal AI chat client for Ollama and Gemini. `dwight` gives you a simple chat UI, saved conversations, provider-aware model profiles, and file attachments for local context.
+Terminal AI chat client for Ollama and Gemini. `dwight` keeps model switching, saved conversations, and local file context in a lightweight terminal tool instead of a full browser workspace.
+
+![dwight hero screenshot](assets/screenshots/hero.png)
 
 ## Install
 

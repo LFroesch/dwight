@@ -47,7 +47,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
-		if msg.String() == "?" {
+		if msg.String() == "?" && !m.textInputCapturesQuestionMark() {
 			m.showHelp = !m.showHelp
 			return m, nil
 		}
@@ -205,6 +205,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m model) textInputCapturesQuestionMark() bool {
+	return m.viewMode == ViewChat && m.chatState == ChatStateReady && m.chatTextArea.Focused() && !m.chatStreaming && !m.showAtComplete && !m.showResourcePicker && !m.chatCopyMode
 }
 
 // =============================================================================
