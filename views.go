@@ -14,6 +14,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+func appTitle() string {
+	return s.Title.Render("dwight") + s.Dim.Render(" "+version)
+}
+
 func (m model) View() string {
 	if m.showHelp {
 		return m.renderHelp()
@@ -90,7 +94,7 @@ func (m model) viewMenu() string {
 		profile = s.Dim.Render("provider/model: ") + s.Success.Render(fmt.Sprintf("%s · %s", storage.NormalizeProvider(p.Provider), p.Model))
 	}
 
-	headerLine := s.Title.Render("dwight")
+	headerLine := appTitle()
 	if profile != "" {
 		headerLine += s.Dim.Render("  ·  ") + profile
 	}
@@ -134,7 +138,7 @@ func (m model) viewChat() string {
 	provider := storage.NormalizeProvider(profile.Provider)
 
 	// Header: model name + context bar + stats
-	header := s.Title.Render("dwight") +
+	header := appTitle() +
 		s.Dim.Render(" | profile: ") + s.Title.Render(profile.Name) +
 		s.Dim.Render(" | provider: ") + s.Success.Render(provider) +
 		s.Dim.Render(" | model: ") + s.Success.Render(profile.Model)
