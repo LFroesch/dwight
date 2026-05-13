@@ -11,11 +11,12 @@ import (
 	"dwight/internal/storage"
 	s "dwight/internal/styles"
 
+	"github.com/LFroesch/tui-suite/suitechrome"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func appTitle() string {
-	return s.Title.Render("dwight") + s.Dim.Render(" "+version)
+	return suitechrome.RenderTitle("dwight", version)
 }
 
 func (m model) View() string {

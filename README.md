@@ -4,9 +4,11 @@ Terminal AI chat client for Ollama and Gemini. `dwight` keeps model switching, s
 
 ![dwight hero screenshot](assets/screenshots/hero.png)
 
+**Live demo:** [froesch.dev](https://froesch.dev)
+
 ## Install
 
-Supported platforms: Linux and macOS. On Windows, use WSL.
+Supported platforms: Linux, macOS, and Windows.
 
 Recommended:
 
@@ -19,6 +21,16 @@ Other options:
 ```bash
 go install github.com/LFroesch/dwight@latest
 make install
+```
+
+Windows:
+
+```powershell
+./install.ps1
+```
+
+```bat
+install.cmd
 ```
 
 Run:

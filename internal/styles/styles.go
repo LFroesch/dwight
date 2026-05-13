@@ -1,8 +1,7 @@
 package styles
 
 import (
-	"strings"
-
+	"github.com/LFroesch/tui-suite/suitechrome"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -80,14 +79,9 @@ var (
 // Footer builds a consistent footer from key-description pairs.
 // Example: Footer("enter", "select", "esc", "back")
 func Footer(pairs ...string) string {
-	var b strings.Builder
-	sep := Separator.Render(" | ")
+	actions := make([]suitechrome.Action, 0, len(pairs)/2)
 	for i := 0; i+1 < len(pairs); i += 2 {
-		if i > 0 {
-			b.WriteString(sep)
-		}
-		b.WriteString(KeyStyle.Render(pairs[i]))
-		b.WriteString(Dim.Render(": " + pairs[i+1]))
+		actions = append(actions, suitechrome.Action{Key: pairs[i], Label: pairs[i+1]})
 	}
-	return b.String()
+	return suitechrome.RenderActions(actions)
 }

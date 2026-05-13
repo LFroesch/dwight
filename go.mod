@@ -1,10 +1,11 @@
 module dwight
 
-go 1.23.0
+go 1.23.3
 
 toolchain go1.24.7
 
 require (
+	github.com/LFroesch/tui-suite/suitechrome v0.0.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/glamour v0.10.0
@@ -43,3 +44,5 @@ require (
 	golang.org/x/term v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )
+
+replace github.com/LFroesch/tui-suite/suitechrome => ../suitechrome
