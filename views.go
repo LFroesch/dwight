@@ -11,7 +11,7 @@ import (
 	"dwight/internal/storage"
 	s "dwight/internal/styles"
 
-	"github.com/LFroesch/tui-suite/suitechrome"
+	"dwight/suitechrome"
 	"github.com/charmbracelet/lipgloss"
 )
 

@@ -1,7 +1,7 @@
 package styles
 
 import (
-	"github.com/LFroesch/tui-suite/suitechrome"
+	"dwight/suitechrome"
 	"github.com/charmbracelet/lipgloss"
 )
 
